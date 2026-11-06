@@ -61,9 +61,9 @@ layers = [
 % Inspect the network architecture.
 analyzeNetwork(layers)
 
-% The official test set is supplied through ValidationData so its
-% held-out accuracy and loss can be plotted during training. The custom plot
-% labels these curves "Test set".
+% The validation split (20% of train) is supplied through ValidationData so
+% its held-out accuracy and loss can be plotted during training. The official
+% test set has no labels: it is only used for predictions (JSON export).
 % Train the network using the R2024a dlnetwork workflow.
 miniBatchSize = 500;
 % Keep MATLAB's progress window for device/status information, and
@@ -86,13 +86,38 @@ options = trainingOptions("sgdm", ...
 
 net = trainnet(augTrain, layers, "crossentropy", options);
 
-% Evaluate the final network on the complete training and sets.
+% Evaluate the final network on the training and validation sets.
+classNames = categories(imgDataTrain.Labels);
+
 trainScores = minibatchpredict(net, augTrain);
-trainLabelsPred = scores2label(trainScores, categories(imgDataTrain.Labels));
+trainLabelsPred = scores2label(trainScores, classNames);
 trainAccuracy = mean(trainLabelsPred == imgDataTrain.Labels);
 fprintf("Train-set accuracy: %.2f%%\n", 100 * trainAccuracy);
 
-testScores = minibatchpredict(net, imgDataTest);
-testLabelsPred = scores2label(testScores, categories(labelsTrain));
-testAccuracy = mean(testLabelsPred == labelsTest);
-fprintf("Test-set accuracy: %.2f%%\n", 100 * testAccuracy);
+validationScores = minibatchpredict(net, augValidation);
+validationLabelsPred = scores2label(validationScores, classNames);
+validationAccuracy = mean(validationLabelsPred == imgDataValidation.Labels);
+fprintf("Validation-set accuracy: %.2f%%\n", 100 * validationAccuracy);
+
+% Prédictions sur le test : les vraies classes ne sont pas fournies
+% (seul le serveur d'évaluation les connaît), donc pas de précision ici.
+testScores = minibatchpredict(net, augTest);
+testLabelsPred = scores2label(testScores, classNames);
+
+% Export JSON pour le serveur d'évaluation : { "0": "bread", "1": "rice", ... }
+% Clé = nom du fichier sans extension, valeur = classe prédite (= nom du
+% dossier de train, déjà en minuscules). On associe via le nom de fichier et
+% non la position, car les fichiers sont triés par ordre alphabétique
+% (0, 1, 10, 100, ...).
+[~, testIds] = fileparts(imgDataTest.Files);
+predictions = containers.Map(testIds, cellstr(testLabelsPred));
+
+% Le JSON est écrit dans le dossier "built" (au même niveau que food-11),
+% créé automatiquement s'il n'existe pas encore
+outputFolder = "built";
+if ~isfolder(outputFolder)
+    mkdir(outputFolder);
+end
+jsonFile = fullfile(outputFolder, "predictions.json");
+writelines(jsonencode(predictions, PrettyPrint=true), jsonFile);
+fprintf("Prédictions du test écrites dans %s (%d images)\n", jsonFile, predictions.Count);
