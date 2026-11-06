@@ -21,8 +21,8 @@ end
 close all
 clear
 clc
-trainFolder = "train";
-testFolder = "test";
+trainFolder = "food-11/train";
+testFolder = "food-11/test";
 %Chargement des images d'entraînement et de test
 imgDataTrain = imageDatastore(trainFolder, ...
     IncludeSubfolders=true, ...
