@@ -1,9 +1,9 @@
-# Projet TIP – Challenge Food-11
+# Projet TIP : Challenge Food-11
 
 Classification d'images de nourriture en **11 catégories** avec un réseau de neurones convolutif (CNN) sous MATLAB.
 Le sujet complet est dans `[SUJET]_food-11.html` (non versionné, à récupérer sur Moodle).
 
-> ⚠️ Ce README est à mettre à jour à chaque étape importante du projet (voir [État d'avancement](#état-davancement)).
+> Ce README est à mettre à jour à chaque étape importante du projet (voir [État d'avancement](#état-davancement)).
 
 ---
 
@@ -40,7 +40,9 @@ Projet_TIP/
 ├── prepareData.m
 ├── README.md
 ├── .gitignore
-└── food-11/              ← ignoré par git
+├── built/                <- créé par CNN_Projet.m, ignoré par git
+│   └── predictions.json
+└── food-11/              <- ignoré par git
     ├── train/
     │   ├── bread/            (1356 images)
     │   ├── dairy/            (573)
@@ -53,10 +55,10 @@ Projet_TIP/
     │   ├── seafood/          (1202)
     │   ├── soup/             (2000)
     │   └── vegetable-fruit/  (941)
-    └── test/                 (3097 images 0.jpg, 1.jpg, … SANS étiquette)
+    └── test/                 (3097 images 0.jpg, 1.jpg, ... SANS étiquette)
 ```
 
-Attention aux doubles dossiers à la décompression (`food-11/food-11/train` ❌). Le chemin doit être `food-11/train` ✅.
+Attention aux doubles dossiers à la décompression (`food-11/food-11/train` est incorrect). Le chemin doit être `food-11/train`.
 
 Contrôle rapide : 13 296 images dans `train`, 3 097 dans `test`.
 
@@ -65,7 +67,7 @@ Contrôle rapide : 13 296 images dans `train`, 3 097 dans `test`.
 1. Ouvrez MATLAB.
 2. **Placez le dossier courant de MATLAB à la racine du dépôt** (`Projet_TIP/`). Les chemins dans le code sont relatifs (`"food-11/train"`), donc lancer le script depuis un autre dossier fait échouer `imageDatastore`.
 3. Lancez `prepareData.m` pour vérifier que les données sont bien trouvées (affiche 16 images au hasard).
-4. Lancez `CNN_Projet.m` pour le pipeline complet.
+4. Lancez `CNN_Projet.m` pour le pipeline complet. Les prédictions du test sont écrites dans `built/predictions.json` (le dossier `built/` est créé automatiquement). Ce fichier est écrasé à chaque exécution : renommez-le si vous voulez garder plusieurs versions.
 
 ### 1.5 (Optionnel) Utiliser le GPU
 
@@ -89,26 +91,27 @@ Décommenter seulement la ligne `ExecutionEnvironment` provoque une erreur de sy
 | Fichier | Rôle |
 |---|---|
 | `prepareData.m` | Script de vérification : charge `food-11/train` et affiche une mosaïque de 16 images. |
-| `CNN_Projet.m` | Pipeline principal : données → réseau → entraînement → évaluation. |
-| `.gitignore` | Exclut `food-11/` et `.DS_Store` du dépôt. |
+| `CNN_Projet.m` | Pipeline principal : données, réseau, entraînement, évaluation, export JSON. |
+| `.gitignore` | Exclut `food-11/`, `built/`, `.DS_Store` et le fichier du sujet du dépôt. |
 
 ### Déroulement de `CNN_Projet.m`
 
-1. **`readFoodImage`** : fonction appelée sur chaque image lue. Elle convertit l'image en RGB (niveaux de gris → 3 canaux, RGBA → RGB), la redimensionne en 128×128 et normalise les pixels entre 0 et 1.
+1. **`readFoodImage`** : fonction appelée sur chaque image lue. Elle convertit l'image en RGB (niveaux de gris vers 3 canaux, RGBA vers RGB), la redimensionne en 128×128 et normalise les pixels entre 0 et 1.
 2. **Chargement des données** :
    - `imageDatastore` sur `food-11/train`, avec l'étiquette = nom du sous-dossier ;
    - `imageDatastore` sur `food-11/test` (sans étiquette) ;
-   - `splitEachLabel(..., 0.8, "randomized")` : 80 % entraînement / 20 % validation, en gardant les proportions de chaque classe (≈ 10 637 / 2 659 images) ;
+   - `splitEachLabel(..., 0.8, "randomized")` : 80 % entraînement / 20 % validation, en gardant les proportions de chaque classe (env. 10 637 / 2 659 images) ;
    - `augmentedImageDatastore` : fournit les images au réseau par lots, au format `[128 128 3]` ;
    - affichage de 25 images d'entraînement pour contrôle.
-3. **Réseau** : un CNN minimal (1 convolution 3×3 de 8 filtres → batch norm → ReLU → max pooling → couche dense de 11 sorties → softmax).
+3. **Réseau** : un CNN minimal (1 convolution 3×3 de 8 filtres, batch norm, ReLU, max pooling, couche dense de 11 sorties, softmax).
 4. **Entraînement** : `trainnet` avec SGD à momentum, 16 époques, lots de 500 images, la validation étant évaluée toutes les 50 itérations.
-5. **Évaluation** : précision sur le train, puis sur le test (voir problèmes connus).
+5. **Évaluation** : précision sur le train et sur la validation. Le test n'ayant pas d'étiquettes, on ne calcule pas de précision dessus : on prédit seulement ses classes.
+6. **Export JSON** : les prédictions du test sont écrites dans `built/predictions.json` au format attendu par le serveur (`{"0": "bread", ...}`). Chaque prédiction est associée au nom de son fichier image.
 
 ### Notions utiles
 
 - **Train / validation / test** : on entraîne sur *train* et on choisit les hyperparamètres et l'architecture d'après la *validation*. Le *test* n'a pas d'étiquettes : seul le serveur d'évaluation les connaît.
-- **Ordre des fichiers de test** : MATLAB les trie par ordre alphabétique (`0, 1, 10, 100, …`) et non par ordre numérique. Pour le JSON, associez toujours la prédiction au **nom du fichier**, pas à sa position dans la liste.
+- **Ordre des fichiers de test** : MATLAB les trie par ordre alphabétique (`0, 1, 10, 100, ...`) et non par ordre numérique. Pour le JSON, associez toujours la prédiction au **nom du fichier**, pas à sa position dans la liste.
 
 ---
 
@@ -128,18 +131,18 @@ Décommenter seulement la ligne `ExecutionEnvironment` provoque une erreur de sy
 ## 4. État d'avancement
 
 - [x] Chargement et préparation des données (vérifié sous MATLAB R2026b)
-- [ ] Augmentation de données (symétries, rotations, zoom…) sur le train
+- [ ] Augmentation de données (symétries, rotations, zoom, etc.) sur le train
 - [ ] Gestion du déséquilibre des classes (rice : 376 images contre 2000 pour dessert et soup)
 - [ ] Graine aléatoire fixe (`rng`) pour un découpage train/validation reproductible
 - [ ] Réseau n°1 (CNN « maison »)
 - [ ] Réseau n°2 (par ex. transfer learning sur un réseau pré-entraîné léger)
-- [ ] Évaluation sur la validation (précision, F1, matrice de confusion)
-- [ ] Génération du JSON de prédictions sur le test
+- [x] Évaluation sur la validation : précision
+- [ ] Évaluation sur la validation : F1 par classe et matrice de confusion
+- [x] Génération du JSON de prédictions sur le test (`built/predictions.json`)
 - [ ] Rapport
 
 ### Problèmes connus
 
-- **`CNN_Projet.m`, fin du script** : `labelsTrain` et `labelsTest` ne sont pas définis, donc le script plante après l'entraînement. De toute façon, le test n'a pas d'étiquettes : il faut évaluer sur la validation et générer le JSON pour le test.
 - **Ligne `subset = readall(subset(...))`** : la variable porte le nom de la fonction qu'elle appelle. Ça fonctionne grâce au `clear` en début de script, mais il vaudrait mieux la renommer.
 - **`ReadFcn` personnalisée** : elle ralentit la lecture des images et refait le redimensionnement déjà fait par `augmentedImageDatastore`. À optimiser.
 
