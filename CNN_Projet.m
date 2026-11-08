@@ -125,9 +125,55 @@ options = trainingOptions(cfg.optimiseur, ...
 % La graine d'entraînement fixe les poids de départ et l'ordre des images
 rng(cfg.graineEntrainement, "twister");
 chrono = tic;
-net = trainnet(augTrain, layers, "crossentropy", options);
+[net, info] = trainnet(augTrain, layers, "crossentropy", options);
 dureeMinutes = toc(chrono) / 60;
 fprintf("Durée de l'entraînement : %.1f min\n", dureeMinutes);
+
+% Les fichiers produits vont dans le dossier "built" (au même niveau que
+% food-11), créé automatiquement s'il n'existe pas encore
+outputFolder = "built";
+if ~isfolder(outputFolder)
+    mkdir(outputFolder);
+end
+
+%% Historique de l'entraînement
+% Une ligne par epoch dans built/historique_<essai>_graine<n>.csv, pour
+% tracer les courbes et faire le diagnostic biais/variance même quand le
+% script tourne sans fenêtre graphique. Écrit juste après l'entraînement,
+% pour être gardé même si la suite du script plante. Le fichier est écrasé
+% si on relance le même essai avec la même graine : changer cfg.nomEssai à
+% chaque nouveau réglage. Exactitudes entre 0 et 1, comme dans le journal.
+% Côté train (colonnes "Lots") : moyenne des lots de l'epoch, mesurée
+% pendant l'apprentissage. Deux effets jouent en sens opposés : la moyenne
+% mélange des états successifs du réseau (les premiers lots de l'epoch sont
+% vus par un réseau moins entraîné, ce qui la tire vers le bas), et la
+% batch norm utilise les statistiques de chaque lot au lieu des moyennes
+% globales utilisées en prédiction. Elle peut donc s'écarter, dans un sens
+% ou dans l'autre, de l'exactitude train finale calculée plus bas, qui
+% reste la référence pour comparer train et validation. Côté validation :
+% mesure de fin d'epoch, sur le réseau en mode prédiction.
+histoTrain = info.TrainingHistory;
+histoVal   = info.ValidationHistory;
+[groupes, epoch] = findgroups(histoTrain.Epoch);
+perteTrainLots      = splitapply(@mean, histoTrain.Loss, groupes);
+exactitudeTrainLots = splitapply(@mean, histoTrain.Accuracy, groupes) / 100;
+
+% La validation de fin d'epoch a lieu à l'itération epoch x iterationsParEpoch.
+% Si l'entraînement a été arrêté en cours d'epoch (bouton Stop), la dernière
+% validation a lieu à la dernière itération réellement faite.
+iterationVal = min(epoch * iterationsParEpoch, histoTrain.Iteration(end));
+[~, rangVal] = ismember(iterationVal, histoVal.Iteration);
+perteVal      = NaN(size(epoch));
+exactitudeVal = NaN(size(epoch));
+trouve = rangVal > 0;
+perteVal(trouve)      = histoVal.Loss(rangVal(trouve));
+exactitudeVal(trouve) = histoVal.Accuracy(rangVal(trouve)) / 100;
+
+historique = table(epoch, perteTrainLots, exactitudeTrainLots, perteVal, exactitudeVal);
+fichierHistorique = fullfile(outputFolder, "historique_" + cfg.nomEssai + ...
+    "_graine" + cfg.graineEntrainement + ".csv");
+writetable(historique, fichierHistorique);
+fprintf("Historique de l'entraînement écrit dans %s\n", fichierHistorique);
 
 %% Évaluation
 % Précision sur le train : sert à repérer un sous-apprentissage (biais)
@@ -158,13 +204,6 @@ end
 % connaît), donc pas de score ici.
 testScores = minibatchpredict(net, augTest);
 testLabelsPred = scores2label(testScores, classNames);
-
-% Les fichiers produits vont dans le dossier "built" (au même niveau que
-% food-11), créé automatiquement s'il n'existe pas encore
-outputFolder = "built";
-if ~isfolder(outputFolder)
-    mkdir(outputFolder);
-end
 
 % Export JSON pour le serveur d'évaluation : { "0": "bread", "1": "rice", ... }
 % Clé = nom du fichier sans extension, valeur = classe prédite (= nom du
