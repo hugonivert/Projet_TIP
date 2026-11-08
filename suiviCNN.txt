@@ -38,6 +38,10 @@ RÈGLES DE LA DÉMARCHE
   écart-type).
 - On ne compare que des essais lancés sur la même machine (CPU du Mac
   pour l'instant).
+- Seuil de décision (mesuré le 2026-11-08, voir "Mesure du bruit") : entre
+  deux essais lancés avec une seule graine, un écart de frugalité de plus
+  de 0.02 est très probablement réel. En dessous, relancer avec d'autres
+  graines avant de conclure.
 
 
 CHOIX DE CONCEPTION (avec leur justification)
@@ -261,12 +265,55 @@ Décision    : 1. Mesurer d'abord le bruit de notre réseau : graines 2 et
                  l'augmentation de données (0 paramètre ajouté, donc pas
                  de coût en frugalité).
 
+----------------------------------------------------------------------
+MESURE DU BRUIT : cosine_20ep, graines 2 et 3 (2026-11-08)
+----------------------------------------------------------------------
+Pourquoi    : savoir quelle part d'un résultat vient du hasard de
+              l'entraînement (poids de départ, ordre des images), pour
+              décider si un écart entre deux essais est réel. La seule
+              mesure précédente (essai 0, réseau du TP après 1 epoch)
+              n'était pas représentative.
+Changement  : aucun. Réglage de l'essai 2 relancé avec les graines
+              d'entraînement 2 et 3 (même validation, graine de
+              découpage 42).
+Réglages    : 128x128, adam, taux de départ 0.001, cosine, lots de 128,
+              20 epochs. Code du commit c0aadd7.
+Durée       : 11.8 min (graine 2) et 12.5 min (graine 3).
+Résultats   : graine  train   validation  F1 macro  frugalité
+                1     66.8 %    59.9 %     0.569     0.542
+                2     68.0 %    60.5 %     0.583     0.556
+                3     68.4 %    61.0 %     0.574     0.547
+              moyenne 67.7 %    60.5 %     0.575     0.548
+              écart-type         0.5 pt    0.007     0.007
+              Écart maximal entre deux graines : 0.014 de frugalité.
+F1 par classe (graines 1, 2, 3) :
+              dairy 0.36 / 0.36 / 0.27, rice 0.43 / 0.51 / 0.42 : les
+              deux plus petites classes varient de près de 0.09 d'une
+              graine à l'autre (115 et 75 images de validation, quelques
+              images suffisent à faire bouger leur F1). Les grandes
+              classes varient de moins de 0.03 (soup 0.74 / 0.73 / 0.75).
+Lecture     : 1. Bruit faible : environ 0.007 d'écart-type sur le F1 macro
+                 et la frugalité.
+              2. Seuil pratique de 0.02 entre deux essais à une graine
+                 (environ deux fois le bruit attendu sur une différence).
+                 3 graines ne donnent qu'une estimation grossière de
+                 l'écart-type, d'où un seuil prudent.
+              3. Les gains passés sont réels : essai 1 vers essai 2
+                 +0.055 ; essai 3 (0.592) contre la moyenne des 3 graines
+                 de l'essai 2 (0.548) : +0.044, environ 6 fois le bruit.
+              4. Le F1 macro donne autant de poids à dairy et rice
+                 qu'aux grandes classes : leur instabilité pèse sur le
+                 score. Argument pour essayer les poids de classes.
+              5. Limite : on ne mesure que le bruit de l'entraînement sur
+                 une validation fixe. Le score du test pourra s'écarter
+                 de la validation d'environ 0.01 à 0.02 (autres images).
+Décision    : appliquer le seuil de 0.02 aux prochains essais. Suite du
+              plan : augmentation de données (essai 4).
+
 
 PROCHAINS ESSAIS PRÉVUS
 =======================
 
-- Mesure du bruit : réglage de l'essai 2 avec les graines 2 et 3
-  (environ 26 min en tout).
 - Essai 4 : augmentation de données sur le train (retournements
   horizontaux, petites translations et petits zooms aléatoires), cosine,
   40 epochs. Seul changement par rapport à l'essai 3. Hypothèse : écart
