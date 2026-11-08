@@ -41,6 +41,7 @@ Projet_TIP/
 ├── makeCourseProgressOutputFcn.m
 ├── prepareData.m
 ├── README.md
+├── suiviCNN.txt
 ├── .gitignore
 ├── built/                <- créé par CNN_Projet.m, ignoré par git
 │   ├── predictions.json
@@ -112,6 +113,7 @@ Décommenter seulement la ligne `ExecutionEnvironment` provoque une erreur de sy
 | `CNN_Projet.m` | Pipeline principal : réglages, données, réseau, entraînement, évaluation, export JSON, journal des essais. |
 | `evaluerReseau.m` | Fonction commune d'évaluation : exactitude, F1 par classe, F1 macro, nombre de paramètres, score de frugalité, matrice de confusion. À utiliser pour tous les réseaux du groupe afin que les scores soient comparables. |
 | `makeCourseProgressOutputFcn.m` | Courbes d'entraînement lissées avec les epochs marquées, reprise du fichier du TP CIFAR-10, avec la courbe « Test set » renommée « Validation set ». |
+| `suiviCNN.txt` | Journal de bord du CNN personnel : règles de la démarche, choix de conception justifiés, et pour chaque essai la raison, les réglages, les résultats, l'analyse et la décision prise. Sert de base au rapport. |
 | `.gitignore` | Exclut `food-11/`, `built/`, `.DS_Store` et le fichier du sujet du dépôt. |
 
 ### Déroulement de `CNN_Projet.m`

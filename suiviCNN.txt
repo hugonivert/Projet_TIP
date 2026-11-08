@@ -1,0 +1,153 @@
+JOURNAL DE BORD DU CNN PERSONNEL (challenge Food-11)
+====================================================
+
+Ce fichier garde la trace de chaque essai et de la démarche suivie pour
+améliorer le CNN : pourquoi on fait l'essai, ce qui change, les résultats,
+ce qu'on en conclut et la décision prise ensuite. Il sert de base à la
+rédaction du rapport.
+
+Les chiffres bruts sont aussi dans built/essais.csv (une ligne par essai)
+et les courbes dans built/historique_<essai>_graine<n>.csv (une ligne par
+epoch). Ces fichiers ne sont pas sur GitHub : les résultats importants
+sont donc recopiés ici.
+
+
+RÈGLES DE LA DÉMARCHE
+---------------------
+
+- Critère de classement : frugalité = F1 macro - 0.3 / (1 + 1/R), avec R
+  en millions de paramètres. On juge chaque essai sur la frugalité, pas
+  sur l'exactitude. Pénalité : 0.027 pour 100 000 paramètres, 0.05 pour
+  200 000, 0.10 pour 500 000, 0.15 pour 1 M, 0.23 pour 3.5 M.
+- Méthode du cours (diapo 28, "Experimental setup") :
+    1. bien faire sur le train (biais élevé : réseau plus grand, entraîner
+       plus longtemps ou mieux, recherche d'hyperparamètres, autre
+       architecture) ;
+    2. bien faire sur la validation (variance élevée : augmentation de
+       données, régularisation L2 ou dropout, recherche d'hyperparamètres,
+       autre architecture).
+  Adaptation au challenge : "réseau plus grand" coûte en frugalité, donc on
+  cherche de la capacité qui coûte peu de paramètres.
+- Un seul changement à la fois par rapport à l'essai de référence, pour
+  savoir ce qui a produit l'effet.
+- Graines : découpage train/validation toujours avec la graine 42 (même
+  validation pour tout le groupe). Graine d'entraînement 1 pour explorer ;
+  1, 2 et 3 pour mesurer le bruit et pour les réseaux finaux (moyenne et
+  écart-type).
+- On ne compare que des essais lancés sur la même machine (CPU du Mac
+  pour l'instant).
+
+
+CHOIX DE CONCEPTION (avec leur justification)
+---------------------------------------------
+
+[2026-11-07] Lecture des images sans fonction de lecture personnalisée
+  augmentedImageDatastore redimensionne et convertit les images en niveaux
+  de gris en RGB (ColorPreprocessing="gray2rgb"). Lecture du train environ
+  9 fois plus rapide (4.6 s contre 42.2 s), une epoch du réseau du TP
+  environ 4 fois plus rapide (16 s contre 62 s). Indispensable sur un Mac
+  sans GPU.
+
+[2026-11-07] Évaluation commune : evaluerReseau.m
+  Exactitude, F1 par classe, F1 macro, nombre de paramètres, frugalité et
+  matrice de confusion, calculés de la même façon pour tous les réseaux du
+  groupe. Le F1 macro donne le même poids à chaque classe : il compte
+  autant pour rice (376 images de train) que pour soup (2000).
+
+[2026-11-08] Architecture de base : 4 blocs + global average pooling
+  Bloc du TP CIFAR-10 (convolution 3x3, batch norm, ReLU, max pooling 2x2)
+  répété 4 fois avec 16, 32, 64 puis 128 filtres, puis global average
+  pooling (GAP), couche dense de 11 sorties et softmax.
+  - Doubler les filtres en réduisant la taille : schéma classique du cours,
+    caractéristiques de plus en plus abstraites.
+  - GAP : dans le réseau du TP, la couche dense portait à elle seule
+    349 272 des 349 523 paramètres (reliée à toute la carte 63x63x8). Avec
+    le GAP, elle n'a plus que 128 x 11 poids + 11 biais. Total : 99 339
+    paramètres (pénalité 0.027), quelle que soit la taille des images.
+  - Padding "same" : chaque pooling divise exactement la taille par 2.
+
+[2026-11-08] Réglages d'entraînement de base
+  adam, taux d'apprentissage 0.001, lots de 128 (83 mises à jour par epoch
+  au lieu de 21 avec des lots de 500), 20 epochs.
+
+[2026-11-08] Réseau gardé : celui de la dernière epoch
+  Par défaut, trainnet renvoie le réseau de l'epoch où la perte de
+  validation est la plus basse. On impose OutputNetwork="last-iteration" :
+  sinon les scores de validation seraient optimistes (la validation
+  servirait aussi à choisir l'epoch) et l'exactitude train ne
+  correspondrait plus à la fin de l'entraînement, ce qui fausserait le
+  diagnostic biais/variance.
+
+
+ESSAIS
+======
+
+----------------------------------------------------------------------
+ESSAI 0 : tp_1couche (2026-11-07), réseau de référence du TP
+----------------------------------------------------------------------
+Pourquoi    : vérifier que toute la chaîne fonctionne (données, graines,
+              évaluation, export JSON, journal) et avoir un point de départ.
+Réseau      : réseau du TP CIFAR-10 à une couche (conv 3x3 de 8 filtres,
+              batch norm, ReLU, max pooling, couche dense), 349 523
+              paramètres.
+Réglages    : 128x128, sgdm, taux 0.001, lots de 500, 1 epoch, graine 1.
+Résultats   : exactitude train 28.0 %, validation 26.6 %
+              F1 macro 0.2145, frugalité 0.137
+              Graine 2 : F1 macro 0.1872 (même réglage).
+Lecture     : réseau beaucoup trop simple et presque tous ses paramètres
+              sont dans la couche dense. Les résultats sont identiques
+              d'une exécution à l'autre avec la même graine
+              (reproductibilité vérifiée).
+Décision    : concevoir un vrai CNN à plusieurs blocs avec GAP.
+
+----------------------------------------------------------------------
+ESSAI 1 : base_4blocs (2026-11-08), premier vrai CNN
+----------------------------------------------------------------------
+Pourquoi    : obtenir les premiers scores du CNN et faire le diagnostic
+              biais/variance qui oriente le réglage.
+Réseau      : 4 blocs 16-32-64-128 + GAP, 99 339 paramètres.
+Réglages    : 128x128, adam, taux 0.001 constant, lots de 128, 20 epochs,
+              graine 1. Code du commit 21271f5.
+Durée       : 12.4 min sur le CPU du Mac (environ 37 s par epoch).
+Résultats   : exactitude train finale 61.2 %, validation 53.3 %
+              F1 macro 0.514, frugalité 0.487
+              (essai 0 : frugalité 0.137 ; exemples du sujet : 0.57 avec
+              3.5 M de paramètres, 0.54 avec 11.6 M)
+F1 par classe :
+              soup 0.77, vegetable-fruit 0.69, meat 0.59, fried 0.55,
+              noodles-pasta 0.55, dessert 0.49, rice 0.48, egg 0.47,
+              seafood 0.41, bread 0.37, dairy 0.29
+Courbes     : epoch  perte train (lots)  exactitude validation
+                1          1.96               0.33
+                5          1.47               0.42
+                9          1.29               0.52
+               13          1.16               0.54
+               16          1.07               0.51
+               20          0.97               0.53
+Lecture     : 1. Biais : le réseau ne fait que 61 % sur son propre train
+                 et la perte train baisse encore à l'epoch 20, il n'a pas
+                 fini d'apprendre (sous-apprentissage).
+              2. Validation très instable d'une epoch à l'autre (0.42 à
+                 0.54, perte de validation de 1.37 à 1.83) : signe d'un
+                 taux d'apprentissage constant trop fort en fin
+                 d'entraînement. Le score final dépend de l'epoch où l'on
+                 s'arrête.
+              3. Variance encore secondaire : 8 points d'écart entre train
+                 et validation.
+              4. Classes faibles : dairy, bread, seafood.
+Décision    : ne pas mesurer tout de suite le bruit avec les graines 2 et 3
+              (on mesurerait surtout l'instabilité d'un réglage qu'on va
+              changer). Traiter d'abord le biais : calendrier de taux
+              d'apprentissage décroissant, puis entraînement plus long.
+
+
+PROCHAINS ESSAIS PRÉVUS
+=======================
+
+- Essai 2 : calendrier "cosine", 20 epochs (seul changement par rapport à
+  l'essai 1). Hypothèse : validation plus stable en fin d'entraînement et
+  train plus haut.
+- Essai 3 : calendrier "cosine", 40 epochs. Hypothèse : moins de biais en
+  entraînant plus longtemps.
+- Si le train reste bas : plus de capacité (plus de filtres ou 5e bloc),
+  en surveillant le coût en frugalité.
