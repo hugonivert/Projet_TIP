@@ -23,6 +23,7 @@ cfg.tauxApprentissage  = 0.001;   % taux de départ
 % les statistiques de la batch norm)
 cfg.calendrierTaux     = "cosine";
 cfg.augmentation       = true;    % true : retournements, translations et zooms aléatoires sur le train
+cfg.poidsClasses       = "aucun"; % "inverse" : les erreurs sur les petites classes comptent plus
 cfg.tailleLot          = 128;
 cfg.nbEpochs           = 40;      % environ 30 min sur le CPU du Mac
 cfg.afficherCourbes    = true;    % false pour enchaîner des essais sans fenêtre graphique
@@ -30,6 +31,7 @@ cfg.afficherCourbes    = true;    % false pour enchaîner des essais sans fenêt
 % Valeur inattendue : erreur tout de suite plutôt qu'à la fin du script
 % (le journal ne pourrait pas être écrit)
 mustBeMember(cfg.calendrierTaux, ["none" "cosine"]);
+mustBeMember(cfg.poidsClasses, ["aucun" "inverse"]);
 
 %% Chargement des données
 trainFolder = "food-11/train";
@@ -50,6 +52,28 @@ rng(cfg.graineDecoupage, "twister");
 
 classNames = categories(imgDataTrain.Labels);
 inputSize  = [cfg.tailleImage 3];
+
+% Poids de classes (si cfg.poidsClasses = "inverse"), calculés sur le train
+% seulement. Le F1 macro donne autant d'importance à chaque classe, mais le
+% train contient plus de 5 fois plus d'images de dessert ou de soup que
+% de rice : le réseau a tendance à choisir les grandes classes. Avec
+% poids = nombre d'images / (nombre de classes x images de la classe),
+% une erreur sur une petite classe compte plus dans la perte. Le poids
+% moyen sur les images du train vaut 1 : la perte garde en moyenne la même
+% échelle.
+if cfg.poidsClasses == "inverse"
+    imagesParClasse = countcats(imgDataTrain.Labels);
+    poidsClasses = numel(imgDataTrain.Labels) ./ (numel(classNames) * imagesParClasse);
+    disp(table(string(classNames), imagesParClasse, round(poidsClasses, 2), ...
+        VariableNames=["classe" "imagesTrain" "poids"]))
+    % Perte pondérée (normalisée par la taille du lot, comme "crossentropy").
+    % Les deux pertes de l'historique (perteTrainLots et perteVal) sont alors
+    % pondérées : elles ne sont pas comparables à celles des essais sans
+    % poids.
+    fonctionPerte = @(Y, T) crossentropy(Y, T, poidsClasses, WeightsFormat="C");
+else
+    fonctionPerte = "crossentropy";
+end
 
 % augmentedImageDatastore redimensionne les images et convertit celles en
 % niveaux de gris en RGB. La normalisation est faite par la couche d'entrée
@@ -107,7 +131,8 @@ augTest       = augmentedImageDatastore(cfg.tailleImage, imgDataTest, ColorPrepr
 % 128x128), et le nombre de paramètres ne dépend plus de la taille des
 % images (191 787 avec [16 32 64 96 128]).
 % La couche softmax finale donne les probabilités de chaque classe ; la
-% fonction de perte est indiquée séparément dans trainnet.
+% fonction de perte (avec ou sans poids de classes) est indiquée
+% séparément dans trainnet.
 layers = imageInputLayer(inputSize, Name="input");
 for b = 1:numel(cfg.filtres)
     layers = [layers
@@ -177,7 +202,7 @@ options = trainingOptions(cfg.optimiseur, ...
 % La graine d'entraînement fixe les poids de départ et l'ordre des images
 rng(cfg.graineEntrainement, "twister");
 chrono = tic;
-[net, info] = trainnet(augTrain, layers, "crossentropy", options);
+[net, info] = trainnet(augTrain, layers, fonctionPerte, options);
 dureeMinutes = toc(chrono) / 60;
 fprintf("Durée de l'entraînement : %.1f min\n", dureeMinutes);
 
@@ -302,11 +327,11 @@ ligne = table(string(datetime("now", Format="yyyy-MM-dd HH:mm")), cfg.nomEssai, 
     cfg.graineDecoupage, cfg.graineEntrainement, ...
     string(sprintf("%dx%d", cfg.tailleImage(1), cfg.tailleImage(2))), ...
     strjoin(string(cfg.filtres), "-"), cfg.optimiseur, cfg.tauxApprentissage, ...
-    cfg.calendrierTaux, texteAugmentation, cfg.tailleLot, cfg.nbEpochs, ...
+    cfg.calendrierTaux, texteAugmentation, cfg.poidsClasses, cfg.tailleLot, cfg.nbEpochs, ...
     resVal.nbParametres, trainAccuracy, resVal.exactitude, resVal.f1Macro, ...
     resVal.frugalite, dureeMinutes, ...
     VariableNames=["date" "essai" "graineDecoupage" "graineEntrainement" ...
-    "taille" "filtres" "optimiseur" "tauxApprentissage" "calendrierTaux" "augmentation" "tailleLot" "epochs" ...
+    "taille" "filtres" "optimiseur" "tauxApprentissage" "calendrierTaux" "augmentation" "poidsClasses" "tailleLot" "epochs" ...
     "parametres" "exactitudeTrain" "exactitudeVal" "f1Val" "frugalite" "dureeMin"]);
 journal = fullfile(outputFolder, "essais.csv");
 
