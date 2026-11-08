@@ -9,12 +9,12 @@ clc
 %% Réglages de l'essai
 % Pour un nouvel essai, on ne modifie que ce bloc. Chaque exécution ajoute
 % une ligne dans built/essais.csv avec ces réglages et les scores obtenus.
-% Valeurs par défaut : meilleur réglage à ce stade (essai 3 de suiviCNN.txt).
-cfg.nomEssai           = "cosine_40ep";
+% Valeurs par défaut : meilleur réglage à ce stade (essai 5D de suiviCNN.txt).
+cfg.nomEssai           = "aug_5blocs";
 cfg.graineDecoupage    = 42;      % ne jamais changer : même validation pour tout le groupe
 cfg.graineEntrainement = 1;       % 1 par défaut ; 2 et 3 pour mesurer la variabilité
 cfg.tailleImage        = [128 128];
-cfg.filtres            = [16 32 64 128];   % un bloc de convolution par valeur
+cfg.filtres            = [16 32 64 96 128];   % un bloc de convolution par valeur
 cfg.optimiseur         = "adam";
 cfg.tauxApprentissage  = 0.001;   % taux de départ
 % Calendrier du taux (mot-clé uniquement) : "none" = taux constant ;
@@ -22,7 +22,7 @@ cfg.tauxApprentissage  = 0.001;   % taux de départ
 % dernière epoch (qui ne met alors presque plus à jour les poids, seulement
 % les statistiques de la batch norm)
 cfg.calendrierTaux     = "cosine";
-cfg.augmentation       = false;   % true : retournements, translations et zooms aléatoires sur le train
+cfg.augmentation       = true;    % true : retournements, translations et zooms aléatoires sur le train
 cfg.tailleLot          = 128;
 cfg.nbEpochs           = 40;      % environ 30 min sur le CPU du Mac
 cfg.afficherCourbes    = true;    % false pour enchaîner des essais sans fenêtre graphique
@@ -99,13 +99,13 @@ augTest       = augmentedImageDatastore(cfg.tailleImage, imgDataTest, ColorPrepr
 % Le bloc du TP CIFAR-10 (convolution 3x3, batch norm, ReLU, max pooling)
 % est répété une fois par valeur de cfg.filtres. Le padding "same" garde
 % la taille des cartes de caractéristiques à la convolution, ce qui permet
-% à chaque pooling de la diviser exactement par 2. Avec [16 32 64 128],
-% une image 128x128x3 arrive en 8x8x128 à la sortie du dernier bloc.
+% à chaque pooling de la diviser exactement par 2. Avec [16 32 64 96 128],
+% une image 128x128x3 arrive en 4x4x128 à la sortie du dernier bloc.
 % Le global average pooling remplace chaque carte de caractéristiques par
 % sa moyenne. La couche entièrement connectée n'a alors que 128 x 11 poids
 % (contre 63 x 63 x 8 x 11 pour le réseau du TP appliqué à des images
 % 128x128), et le nombre de paramètres ne dépend plus de la taille des
-% images (99 339 avec [16 32 64 128]).
+% images (191 787 avec [16 32 64 96 128]).
 % La couche softmax finale donne les probabilités de chaque classe ; la
 % fonction de perte est indiquée séparément dans trainnet.
 layers = imageInputLayer(inputSize, Name="input");

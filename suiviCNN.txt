@@ -370,12 +370,109 @@ Décision    : selon la règle du seuil, l'augmentation n'est pas adoptée
               dans l'apprentissage par coeur. Le prochain essai la jugera.
 
 
+----------------------------------------------------------------------
+ESSAI 5 : aug_192 et aug_5blocs (2026-11-08), plus de capacité
+----------------------------------------------------------------------
+Pourquoi    : à l'essai 4, l'augmentation a réduit l'écart
+              train/validation (6.4 points) mais le train plafonne à
+              71 % : le biais redevient le problème principal. Levier du
+              cours contre le biais : un réseau plus grand. Comme chaque
+              paramètre coûte en frugalité, on compare deux façons
+              d'ajouter de la capacité pour un coût modéré (les deux
+              options n'ajoutent pas autant de paramètres : 37 760 pour
+              5A, 92 448 pour 5D).
+Changement  : seule l'architecture change par rapport à l'essai 4
+              (augmentation gardée) :
+              5A : plus large, dernier bloc à 192 filtres au lieu de 128
+                   (16-32-64-192), 137 099 paramètres, pénalité 0.036,
+                   environ 73 M de multiplications par image ;
+              5D : plus profond, 5e bloc (16-32-64-96-128), 191 787
+                   paramètres, pénalité 0.048, environ 66 M de
+                   multiplications par image.
+              Deux autres options ont été écartées avant de lancer : un
+              5e bloc à 128 filtres (247 179 paramètres, pénalité 0.059)
+              et tous les blocs élargis de moitié (221 579 paramètres,
+              environ 138 M de multiplications par image, deux fois plus
+              que 5A ou 5D).
+              Critère fixé avant de lancer : frugalité supérieure à 0.616
+              (essai 4 + seuil de 0.02), soit un F1 d'au moins 0.652 pour
+              5A et 0.665 pour 5D.
+Réglages    : 128x128, adam, taux de départ 0.001, cosine, augmentation,
+              lots de 128, 40 epochs, graine 1. Code du commit 9c346ae.
+Durée       : 29.6 min (5A) et 31.4 min (5D) sur le CPU du Mac.
+Résultats   :                     essai 4     5A          5D
+              paramètres          99 339      137 099     191 787
+              exactitude train    71.3 %      71.7 %      82.7 %
+              validation          64.8 %      65.4 %      70.9 %
+              écart               6.4 pts     6.3 pts     11.8 pts
+              perte validation    1.039       1.022       0.858
+              F1 macro            0.623       0.635       0.701
+              frugalité           0.596       0.599       0.652
+F1 par classe :
+              5A : vegetable-fruit 0.82, soup 0.79, meat 0.71,
+              noodles-pasta 0.71, seafood 0.66, egg 0.63, fried 0.62,
+              dessert 0.57, rice 0.56, bread 0.49, dairy 0.43
+              5D : vegetable-fruit 0.86, soup 0.85, seafood 0.76, meat
+              0.75, noodles-pasta 0.75, rice 0.69, fried 0.68, egg 0.67,
+              dessert 0.61, dairy 0.55, bread 0.54
+              5D progresse sur les 11 classes par rapport à l'essai 4,
+              surtout rice (+0.21, au-delà de son bruit habituel qui va
+              jusqu'à 0.09) et dairy (+0.13, probablement au-delà : ce
+              bruit a été mesuré sur un autre réglage), puis seafood et
+              egg (+0.08).
+              Les plus faibles restent bread et dairy.
+Courbes     : 5A   epoch  taux     perte train (lots)  exactitude val.
+                     1   1.0e-3        1.93               0.30
+                    10   8.7e-4        1.29               0.50
+                    20   5.2e-4        1.06               0.57
+                    30   1.5e-4        0.92               0.65
+                    35   4.0e-5        0.89               0.65
+                    40   1e-8          0.88               0.65
+              5D   epoch  taux     perte train (lots)  exactitude val.
+                     1   1.0e-3        1.86               0.33
+                    10   8.7e-4        1.10               0.50
+                    20   5.2e-4        0.81               0.62
+                    30   1.5e-4        0.63               0.68
+                    35   4.0e-5        0.59               0.71
+                    40   1e-8          0.58               0.71
+              Pour les deux, validation stable sur les dernières epochs
+              (taux presque nul).
+Lecture     : 1. 5A ne fait pas mieux : +0.003 de frugalité, dans le
+                 bruit, et le train ne monte pas (71.3 à 71.7 %).
+                 Élargir le dernier bloc à 192 filtres n'a pas réduit le
+                 biais ici.
+              2. 5D réduit nettement le biais : train de 71.3 à 82.7 %,
+                 perte train (lots) finale de 0.91 à 0.58. La validation
+                 gagne 6.1 points et la frugalité +0.056, presque trois
+                 fois le seuil de 0.02, malgré une pénalité plus forte
+                 (0.048 contre 0.027).
+              3. La variance remonte nettement : l'écart passe de 6.4 à
+                 11.8 points (presque x2), encore sous les 14.1 de
+                 l'essai 3 (sans augmentation). À surveiller aux
+                 prochains essais.
+              4. Hypothèse (non vérifiée) sur l'avantage de la
+                 profondeur : le 5e bloc ajoute une réduction de taille,
+                 chaque neurone final voit une plus grande zone de
+                 l'image, et le global average pooling moyenne une carte
+                 de 4x4 au lieu de 8x8. 5D fait pourtant moins de calculs
+                 que 5A. Mais 5D ajoute aussi 2.4 fois plus de paramètres
+                 que 5A : son gain peut venir simplement de là, et pas de
+                 la profondeur. La comparaison ne permet pas de trancher.
+              5. Une seule graine : le gain de 5D est large devant le
+                 bruit mesuré, mais il faudra le confirmer avec les
+                 graines 2 et 3 sur la configuration finale.
+Décision    : adopter 5D. Nouvelles valeurs par défaut du script :
+              filtres 16-32-64-96-128, augmentation activée, nom
+              "aug_5blocs". Prochain seuil à battre : frugalité 0.672.
+
+
 PROCHAINS ESSAIS PRÉVUS
 =======================
 
-- Essai 5 : plus de capacité (réseau un peu plus grand), avec
-  l'augmentation, cosine, 40 epochs. Option à choisir en fonction du coût
-  en frugalité et en temps de calcul.
-- Ensuite si besoin : poids de classes pour dairy, bread et rice (F1
-  macro), dropout avant la couche dense.
+- Essai 6 : images d'entrée en 160x160 au lieu de 128x128. Grâce au global
+  average pooling, aucun paramètre ajouté, donc aucun coût en frugalité.
+  Environ 1.5 fois plus de calculs (une cinquantaine de minutes).
+- Ensuite si besoin : poids de classes pour bread et dairy (F1 macro),
+  dropout avant la couche dense si l'écart train/validation continue de
+  se creuser.
 - Configuration finale : graines 1, 2 et 3, moyenne et écart-type.
