@@ -532,19 +532,91 @@ Décision    : ne pas adopter. On garde 128x128, qui donne le même score
               Le seuil à battre reste 0.672.
 
 
+----------------------------------------------------------------------
+ANALYSE : matrice de confusion de l'essai 5D (2026-11-08)
+----------------------------------------------------------------------
+Pourquoi    : préparer l'essai 7 (poids de classes). Savoir si les
+              classes faibles le sont parce que le réseau les choisit
+              trop rarement (petites classes) ou parce qu'elles
+              ressemblent à d'autres plats.
+Méthode     : réseau de l'essai 5D rechargé depuis
+              built/reseau_aug_5blocs_graine1.mat, sans réentraîner,
+              puis prédictions sur la validation (2 659 images). On
+              retrouve exactement le même F1 macro (0.7006).
+              Rappel : part des vraies images de la classe bien
+              reconnues. Précision : part des prédictions de la classe
+              qui sont justes.
+Résultats   : classe            images val  rappel  précision  F1
+              bread                 271      0.52     0.56     0.54
+              dairy                 115      0.49     0.63     0.55
+              dessert               400      0.60     0.62     0.61
+              egg                   263      0.72     0.62     0.67
+              fried                 235      0.66     0.70     0.68
+              meat                  355      0.78     0.72     0.75
+              noodles-pasta         117      0.77     0.73     0.75
+              rice                   75      0.64     0.75     0.69
+              seafood               240      0.75     0.76     0.76
+              soup                  400      0.87     0.84     0.85
+              vegetable-fruit       188      0.87     0.86     0.86
+Confusions principales :
+              bread : 131 images manquées, classées surtout egg (44),
+              dessert (22), meat (20) et fried (18). Prédites bread à
+              tort : 108, surtout egg (27), fried (25) et dessert (20).
+              dairy : 59 images manquées, dont 24 classées dessert.
+              Prédites dairy à tort : 33, dont 17 dessert.
+              rice : 27 images manquées, surtout noodles-pasta (9) et
+              bread (8). Prédites rice à tort : 16.
+              dessert : 159 images manquées, dispersées (meat 31, soup
+              25, egg 22). Prédites dessert à tort : 146, surtout dairy
+              (24), soup (23), bread et meat (22 chacune).
+Lecture     : 1. dairy et rice sont sous-prédites : dairy est prédite 89
+                 fois pour 115 vraies images, rice 64 fois pour 75
+                 (rappel 0.49 et 0.64, sous leur précision 0.63 et
+                 0.75). C'est compatible avec un effet de taille, le cas
+                 que visent les poids de classes : ils devraient faire
+                 monter leur rappel, au prix d'un peu de précision. Mais
+                 une partie de leurs erreurs relève aussi de la
+                 ressemblance : 24 dairy classées dessert, 9 rice
+                 classées noodles-pasta. noodles-pasta, presque aussi
+                 petite que dairy, n'est d'ailleurs pas sous-prédite (124
+                 prédictions pour 117 vraies images).
+              2. bread a un autre problème : rappel (0.52) et précision
+                 (0.56) faibles tous les deux, erreurs dans les deux
+                 sens, surtout avec egg (44 + 27 = 71 images). Cela va
+                 dans le sens de l'hypothèse notée dans le plan des
+                 prochains essais : la faiblesse de bread ne vient pas
+                 du nombre d'images. bread est un peu sous-prédite (248
+                 prédictions pour 271) mais son poids resterait proche
+                 de la moyenne : peu d'effet attendu des poids de
+                 classes. Hypothèse (non vérifiée, il faudrait regarder
+                 les images) : des assiettes qui mêlent pain et oeufs,
+                 comme les petits-déjeuners.
+              3. dessert reçoit beaucoup d'images des autres classes (146
+                 faux positifs) sans être sur-prédite (387 prédictions
+                 pour 400) : c'est un effet de ressemblance plutôt que
+                 de taille, puisque soup, de même taille, n'a que 68
+                 faux positifs. Hypothèse : les poids de classes, en
+                 réduisant le poids de dessert, pourraient diminuer les
+                 erreurs dairy classées dessert.
+              4. Une seule graine et 75 à 400 images de validation par
+                 classe : pour rice et dairy, quelques images suffisent à
+                 faire bouger ces chiffres.
+Décision    : essai 7 = poids de classes. Gain attendu modeste : si dairy
+              et rice gagnaient chacune 0.05 de F1, le F1 macro ne
+              monterait que d'environ 0.009 (0.10 / 11). Le poids de
+              classes n'ajoutant aucun paramètre, le gain de frugalité
+              serait le même : probablement sous le seuil de 0.02.
+
+
 PROCHAINS ESSAIS PRÉVUS
 =======================
 
-- Avant l'essai 7 : matrice de confusion de l'essai 5D (réseau sauvegardé,
-  sans réentraîner) pour voir avec quelles classes bread et dairy sont
-  confondues.
 - Essai 7 : poids de classes (aucun paramètre ajouté). Effet attendu
   surtout sur dairy et rice, les deux plus faibles des petites classes
   (573 et 376 images dans le train complet ; noodles-pasta, 587 images,
-  atteint pourtant un F1 de 0.75). bread a 1 356 images et reste la plus
-  faible. Hypothèse (à vérifier avec la matrice de confusion) : bread
-  ressemble à d'autres plats, son problème ne vient pas du nombre
-  d'images.
+  atteint pourtant un F1 de 0.75), sous-prédites d'après la matrice de
+  confusion. Peu d'effet attendu sur bread (1 356 images), confondue
+  surtout avec egg.
   Autre piste : dropout avant la couche dense contre l'écart
   train/validation (11.8 points).
 - Configuration finale : graines 1, 2 et 3, moyenne et écart-type.
