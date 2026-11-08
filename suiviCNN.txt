@@ -311,14 +311,71 @@ Décision    : appliquer le seuil de 0.02 aux prochains essais. Suite du
               plan : augmentation de données (essai 4).
 
 
+----------------------------------------------------------------------
+ESSAI 4 : cosine_40ep_aug (2026-11-08), augmentation de données
+----------------------------------------------------------------------
+Pourquoi    : à l'essai 3, l'écart train/validation avait doublé (14
+              points) : le réseau commence à apprendre par coeur. Premier
+              outil du cours contre la variance, sans aucun paramètre
+              ajouté.
+Changement  : augmentation du train à chaque epoch : retournement
+              horizontal une fois sur deux, translation de +/- 40 pixels
+              de l'image d'origine, zoom entre 0.9 et 1.1, zones
+              découvertes remplies avec la couleur moyenne du train (sans
+              cela, 8 % des pixels devenaient noirs). Seul changement par
+              rapport à l'essai 3.
+Réglages    : 128x128, adam, taux de départ 0.001, cosine, augmentation,
+              lots de 128, 40 epochs, graine 1. Code du commit 85ffc88.
+Durée       : 27.5 min sur le CPU du Mac.
+Résultats   :                     essai 3     essai 4
+              exactitude train    77.8 %      71.3 %
+              validation          63.7 %      64.8 %
+              écart               14.1 pts     6.4 pts
+              perte validation    1.088       1.039
+              F1 macro            0.619       0.623
+              frugalité           0.592       0.596
+F1 par classe :
+              vegetable-fruit 0.84, soup 0.79, meat 0.70, noodles-pasta
+              0.69, seafood 0.68, fried 0.62, egg 0.59, dessert 0.57,
+              rice 0.48, bread 0.47, dairy 0.42
+              Hausse pour vegetable-fruit (+0.05), seafood (+0.04) et
+              meat (+0.03) ; baisse pour rice (-0.04) et dairy (-0.03),
+              dans leur bruit habituel (jusqu'à 0.09 d'une graine à
+              l'autre).
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.95               0.29
+               10   8.7e-4          1.31               0.43
+               20   5.2e-4          1.08               0.55
+               30   1.5e-4          0.95               0.63
+               35   4.0e-5          0.92               0.64
+               40   1e-8            0.91               0.65
+              Validation plate autour de 0.647 sur les 6 dernières
+              epochs (taux presque nul).
+Lecture     : 1. Hypothèse confirmée sur la variance : l'écart
+                 train/validation est divisé par deux (14.1 à 6.4 points)
+                 et la perte de validation baisse.
+              2. Gain de score minime : +0.004 de frugalité, sous le
+                 seuil de 0.02, donc non concluant. L'exactitude de
+                 validation gagne 1.1 point, mais le F1 macro bouge à
+                 peine (grandes classes en hausse, petites en légère
+                 baisse).
+              3. Le biais redevient le problème principal : train à 71 %
+                 seulement. Avec 99 339 paramètres, le réseau manque de
+                 capacité pour apprendre des images plus variées.
+Décision    : selon la règle du seuil, l'augmentation n'est pas adoptée
+              sur le seul score. Elle est toutefois gardée activée pour
+              les essais suivants : elle ne coûte aucun paramètre, elle a
+              nettement réduit l'écart, et elle permet d'augmenter la
+              capacité (prochain levier contre le biais) sans retomber
+              dans l'apprentissage par coeur. Le prochain essai la jugera.
+
+
 PROCHAINS ESSAIS PRÉVUS
 =======================
 
-- Essai 4 : augmentation de données sur le train (retournements
-  horizontaux, petites translations et petits zooms aléatoires), cosine,
-  40 epochs. Seul changement par rapport à l'essai 3. Hypothèse : écart
-  train/validation réduit et validation plus haute.
-- Ensuite si besoin : dropout avant la couche dense, poids de classes pour
-  dairy, bread et rice, plus de capacité (plus de filtres ou 5e bloc) en
-  surveillant le coût en frugalité.
+- Essai 5 : plus de capacité (réseau un peu plus grand), avec
+  l'augmentation, cosine, 40 epochs. Option à choisir en fonction du coût
+  en frugalité et en temps de calcul.
+- Ensuite si besoin : poids de classes pour dairy, bread et rice (F1
+  macro), dropout avant la couche dense.
 - Configuration finale : graines 1, 2 et 3, moyenne et écart-type.
