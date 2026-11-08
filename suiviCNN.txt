@@ -608,15 +608,103 @@ Décision    : essai 7 = poids de classes. Gain attendu modeste : si dairy
               serait le même : probablement sous le seuil de 0.02.
 
 
+----------------------------------------------------------------------
+ESSAI 7 : aug_5blocs_poids (2026-11-08), poids de classes
+----------------------------------------------------------------------
+Pourquoi    : la matrice de confusion de l'essai 5D montre dairy et rice
+              sous-prédites (89 prédictions pour 115 vraies images, 64
+              pour 75). Le F1 macro donne autant de poids à chaque
+              classe : faire monter leur rappel devrait aider le score,
+              sans ajouter de paramètre.
+Changement  : nouvelle option cfg.poidsClasses = "inverse" : dans la
+              perte, chaque classe reçoit le poids nombre d'images du
+              train / (11 x images de la classe), calculé sur le train
+              seulement. Poids obtenus : rice 3.21, dairy 2.11,
+              noodles-pasta 2.06, vegetable-fruit 1.28, fried 1.03,
+              seafood 1.01, egg 0.92, bread 0.89, meat 0.68, dessert et
+              soup 0.60. Le poids moyen sur les images du train vaut 1.
+              Seul changement par rapport à l'essai 5D.
+              Critère fixé avant de lancer : frugalité supérieure à 0.672.
+              Gain attendu modeste (voir l'analyse de la matrice de
+              confusion).
+Réglages    : 128x128, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation, poids de classes "inverse",
+              lots de 128, 40 epochs, graine 1. Code du commit 9db2a27.
+Durée       : 34.0 min sur le CPU du Mac (31.4 min pour l'essai 5D).
+Résultats   :                     essai 5D    essai 7
+              exactitude train    82.7 %      80.2 %
+              validation          70.9 %      70.4 %
+              écart               11.8 pts     9.9 pts
+              F1 macro            0.701       0.699
+              frugalité           0.652       0.651
+              Perte de validation (0.856) non comparable : elle est
+              pondérée par les poids de classes.
+F1 par classe :
+              vegetable-fruit 0.85, soup 0.85, noodles-pasta 0.76, meat
+              0.75, seafood 0.74, rice 0.68, egg 0.67, fried 0.66,
+              dessert 0.59, dairy 0.57, bread 0.57
+              Par rapport à 5D : hausse pour bread (+0.03), dairy (+0.02)
+              et noodles-pasta (+0.01) ; baisse pour dessert (-0.03),
+              seafood (-0.02) et fried (-0.02) ; rice ne bouge presque
+              pas (-0.01).
+Matrice de confusion (recalculée depuis le réseau sauvegardé, même F1
+macro 0.6990) :
+              classe     rappel 5D/7   précision 5D/7   prédictions 5D/7
+              dairy      0.49 / 0.68    0.63 / 0.50      89 / 157 (115)
+              rice       0.64 / 0.75    0.75 / 0.63      64 /  89  (75)
+              noodles-p. 0.77 / 0.82    0.73 / 0.71     124 / 136 (117)
+              dessert    0.60 / 0.53    0.62 / 0.66     387 / 323 (400)
+              bread      0.52 / 0.55    0.56 / 0.60     248 / 248 (271)
+              (entre parenthèses : nombre de vraies images de
+              validation)
+              dairy classées dessert : 24 à l'essai 5D, 6 ici ; dessert
+              classées dairy : 17 à l'essai 5D, 38 ici.
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.92               0.36
+               10   8.7e-4          1.11               0.52
+               20   5.2e-4          0.81               0.61
+               30   1.5e-4          0.62               0.67
+               35   4.0e-5          0.59               0.70
+               40   1e-8            0.57               0.70
+              Pertes pondérées, non comparables aux essais précédents.
+              Validation stable autour de 0.704 sur les 6 dernières
+              epochs (taux presque nul).
+Lecture     : 1. Le mécanisme fonctionne : le rappel de dairy passe de
+                 0.49 à 0.68 et celui de rice de 0.64 à 0.75.
+              2. Mais la correction va trop loin : dairy et rice sont
+                 maintenant sur-prédites (157 prédictions pour 115
+                 vraies images, 89 pour 75) et leur précision baisse
+                 (0.63 à 0.50 ; 0.75 à 0.63). Le F1 de rice ne bouge
+                 presque pas, celui de dairy gagne seulement 0.02.
+              3. Les erreurs changent surtout de sens : moins de dairy
+                 classées dessert (24 à 6), mais plus de dessert classées
+                 dairy (17 à 38). dessert perd ce que dairy gagne.
+              4. Le train baisse (80.2 % contre 82.7 %), probablement
+                 parce que le réseau donne moins d'importance aux grandes
+                 classes (une seule graine). L'écart train/validation
+                 baisse parce que le train baisse, pas parce que la
+                 validation monte.
+              5. bread gagne 0.03 de F1, à la limite du bruit ; elle
+                 reste confondue surtout avec egg (39 + 27 = 66 images).
+              6. Au total, frugalité -0.002 : dans le bruit, aucun gain.
+Décision    : ne pas adopter. L'option reste dans le code avec "aucun"
+              par défaut. Des poids plus doux (racine carrée de
+              l'inverse) trouveraient peut-être un équilibre, mais le
+              gain possible semble faible (environ 0.01 d'après
+              l'estimation de l'analyse de l'essai 5D, sous le seuil).
+
+
 PROCHAINS ESSAIS PRÉVUS
 =======================
 
-- Essai 7 : poids de classes (aucun paramètre ajouté). Effet attendu
-  surtout sur dairy et rice, les deux plus faibles des petites classes
-  (573 et 376 images dans le train complet ; noodles-pasta, 587 images,
-  atteint pourtant un F1 de 0.75), sous-prédites d'après la matrice de
-  confusion. Peu d'effet attendu sur bread (1 356 images), confondue
-  surtout avec egg.
-  Autre piste : dropout avant la couche dense contre l'écart
-  train/validation (11.8 points).
+- Bilan après l'essai 7 : depuis l'essai 4, seul le 5e bloc a apporté un
+  gain au-dessus du seuil ; les autres leviers testés sans paramètre
+  ajouté (augmentation seule, taille des images, poids de classes) sont
+  restés dans le bruit. Diagnostic de l'essai 5D : environ 17 %
+  d'erreurs sur le train (biais) et 12 points d'écart avec la validation
+  (variance).
+- Essai 8, deux pistes à choisir :
+  A. 60 epochs au lieu de 40 (environ 47 min), contre le biais. Avec
+     l'augmentation, l'écart devrait moins se creuser qu'à l'essai 3.
+  B. Dropout avant la couche dense, contre l'écart train/validation.
 - Configuration finale : graines 1, 2 et 3, moyenne et écart-type.
