@@ -77,13 +77,14 @@ Contrôle rapide : 13 296 images dans `train`, 3 097 dans `test`.
 
 ### 1.5 Faire un essai
 
-Tous les réglages sont regroupés dans le bloc `Réglages de l'essai` en haut de `CNN_Projet.m` (structure `cfg`) : nom de l'essai, graines, taille des images, filtres des blocs de convolution, optimiseur, taux d'apprentissage et son calendrier, taille des lots, nombre d'epochs, affichage des graphiques. Pour un nouvel essai, on ne modifie que ce bloc.
+Tous les réglages sont regroupés dans le bloc `Réglages de l'essai` en haut de `CNN_Projet.m` (structure `cfg`) : nom de l'essai, graines, taille des images, filtres des blocs de convolution, optimiseur, taux d'apprentissage et son calendrier, augmentation de données, taille des lots, nombre d'epochs, affichage des graphiques. Pour un nouvel essai, on ne modifie que ce bloc.
 
 - `cfg.nomEssai` : nom court qui décrit l'essai (il apparaît dans le journal).
 - `cfg.graineDecoupage = 42` : **ne jamais la changer**. Elle garantit le même découpage train/validation pour tous les essais et pour tout le groupe.
 - `cfg.graineEntrainement` : 1 par défaut. Pour mesurer la part de hasard d'un résultat, relancer le même réglage avec 2 puis 3 et comparer les moyennes.
 - `cfg.filtres = [16 32 64 128]` : un bloc de convolution par valeur, avec ce nombre de filtres. On change l'architecture en modifiant seulement cette ligne.
 - `cfg.calendrierTaux` : `"none"` (taux constant) ou `"cosine"` (le taux décroît en douceur jusqu'au taux de départ x 1e-5, atteint à la dernière epoch). Avec `"cosine"`, tout le calendrier dépend du nombre d'epochs : pour choisir ce nombre, on compare des essais complets.
+- `cfg.augmentation` : `false` par défaut. Avec `true`, chaque image du train est transformée au hasard à chaque epoch (retournement horizontal une fois sur deux, translation de +/- 40 pixels de l'image d'origine, zoom entre 0,9 et 1,1, zones découvertes remplies avec la couleur moyenne du train). La validation et le test ne sont jamais augmentés, et l'exactitude train finale est mesurée sur les vraies images.
 - `cfg.afficherCourbes = false` : aucun graphique, pour enchaîner des essais sans fenêtre.
 
 Chaque exécution ajoute une ligne dans `built/essais.csv` (réglages, nombre de paramètres, exactitude train et validation, F1 macro, frugalité, durée). Si les colonnes du journal changent, l'ancien fichier est archivé sous `built/essais_ancien_<date>.csv` et un nouveau journal est commencé.

@@ -22,6 +22,7 @@ cfg.tauxApprentissage  = 0.001;   % taux de départ
 % dernière epoch (qui ne met alors presque plus à jour les poids, seulement
 % les statistiques de la batch norm)
 cfg.calendrierTaux     = "cosine";
+cfg.augmentation       = false;   % true : retournements, translations et zooms aléatoires sur le train
 cfg.tailleLot          = 128;
 cfg.nbEpochs           = 40;      % environ 30 min sur le CPU du Mac
 cfg.afficherCourbes    = true;    % false pour enchaîner des essais sans fenêtre graphique
@@ -52,8 +53,45 @@ inputSize  = [cfg.tailleImage 3];
 
 % augmentedImageDatastore redimensionne les images et convertit celles en
 % niveaux de gris en RGB. La normalisation est faite par la couche d'entrée
-% du réseau (centrage sur la moyenne du train).
-augTrain      = augmentedImageDatastore(cfg.tailleImage, imgDataTrain, ColorPreprocessing="gray2rgb");
+% du réseau (centrage sur la moyenne du train, augmenté si cfg.augmentation).
+% Augmentation de données (train seulement, si cfg.augmentation) : à chaque
+% epoch, chaque image est transformée au hasard, ce qui limite
+% l'apprentissage par coeur (variance) sans ajouter de paramètre.
+%   - retournement horizontal une fois sur deux (un plat retourné reste le
+%     même plat) ;
+%   - translation de +/- 40 pixels en x et en y (le plat n'est pas toujours
+%     centré). Elle s'applique avant le redimensionnement, donc en pixels de
+%     l'image d'origine : environ +/- 8 % pour une image de 512 pixels (la
+%     majorité), jusqu'à 14 % pour les plus petites (289 pixels) et
+%     proportionnellement moins pour les très grandes ;
+%   - zoom entre 0.9 et 1.1 (photos prises de plus ou moins près) : 0.9
+%     éloigne l'image et découvre ses bords, 1.1 la rapproche et les coupe.
+% Les zones découvertes par la translation et le zoom sont remplies avec la
+% couleur moyenne des images du train (FillValue, mesurée sur des images
+% non augmentées) et non en noir (valeur par défaut) : la validation et le
+% test n'ont jamais de bandes noires, et après le centrage de la couche
+% d'entrée ces zones valent environ 0, donc n'apportent aucune information.
+% Pas de retournement vertical (images peu naturelles), de rotation (coins
+% à remplir, angle peu utile pour des photos de plats) ni de changement de
+% couleur (indice clé pour la nourriture).
+% Reproductibilité : les transformations sont tirées avec le générateur
+% aléatoire de la session, donc fixées par cfg.graineEntrainement (ce ne
+% serait plus le cas avec une préparation des données en parallèle).
+if cfg.augmentation
+    augmenteur = imageDataAugmenter( ...
+        RandXReflection=true, ...
+        RandXTranslation=[-40 40], ...
+        RandYTranslation=[-40 40], ...
+        RandScale=[0.9 1.1], ...
+        FillValue=[146 117 88]);   % couleur moyenne RGB du train
+    augTrain = augmentedImageDatastore(cfg.tailleImage, imgDataTrain, ...
+        ColorPreprocessing="gray2rgb", DataAugmentation=augmenteur);
+else
+    augTrain = augmentedImageDatastore(cfg.tailleImage, imgDataTrain, ColorPreprocessing="gray2rgb");
+end
+% Train sans augmentation : sert à mesurer l'exactitude train finale sur
+% les vraies images, comparable à la validation
+augTrainEval  = augmentedImageDatastore(cfg.tailleImage, imgDataTrain, ColorPreprocessing="gray2rgb");
 augValidation = augmentedImageDatastore(cfg.tailleImage, imgDataValidation, ColorPreprocessing="gray2rgb");
 augTest       = augmentedImageDatastore(cfg.tailleImage, imgDataTest, ColorPreprocessing="gray2rgb");
 
@@ -182,7 +220,10 @@ fprintf("Réseau entraîné sauvegardé dans %s\n", fichierReseau);
 % batch norm utilise les statistiques de chaque lot au lieu des moyennes
 % globales utilisées en prédiction. Elle peut donc s'écarter, dans un sens
 % ou dans l'autre, de l'exactitude train finale calculée plus bas, qui
-% reste la référence pour comparer train et validation. Côté validation :
+% reste la référence pour comparer train et validation. Avec
+% cfg.augmentation, ces colonnes sont en plus mesurées sur des images
+% transformées (tâche plus difficile), donc nettement plus basses que
+% l'exactitude train finale, calculée sur les vraies images. Côté validation :
 % mesure de fin d'epoch, sur le réseau en mode prédiction.
 histoTrain = info.TrainingHistory;
 histoVal   = info.ValidationHistory;
@@ -212,7 +253,7 @@ fprintf("Historique de l'entraînement écrit dans %s\n", fichierHistorique);
 
 %% Évaluation
 % Précision sur le train : sert à repérer un sous-apprentissage (biais)
-trainScores = minibatchpredict(net, augTrain);
+trainScores = minibatchpredict(net, augTrainEval);
 trainLabelsPred = scores2label(trainScores, classNames);
 trainAccuracy = mean(trainLabelsPred == imgDataTrain.Labels);
 fprintf("Train-set accuracy: %.2f%%\n", 100 * trainAccuracy);
@@ -253,15 +294,19 @@ fprintf("Prédictions du test écrites dans %s (%d images)\n", jsonFile, predict
 
 %% Journal des essais
 % Une ligne par exécution dans built/essais.csv (créé au premier essai)
+texteAugmentation = "non";
+if cfg.augmentation
+    texteAugmentation = "oui";
+end
 ligne = table(string(datetime("now", Format="yyyy-MM-dd HH:mm")), cfg.nomEssai, ...
     cfg.graineDecoupage, cfg.graineEntrainement, ...
     string(sprintf("%dx%d", cfg.tailleImage(1), cfg.tailleImage(2))), ...
     strjoin(string(cfg.filtres), "-"), cfg.optimiseur, cfg.tauxApprentissage, ...
-    cfg.calendrierTaux, cfg.tailleLot, cfg.nbEpochs, ...
+    cfg.calendrierTaux, texteAugmentation, cfg.tailleLot, cfg.nbEpochs, ...
     resVal.nbParametres, trainAccuracy, resVal.exactitude, resVal.f1Macro, ...
     resVal.frugalite, dureeMinutes, ...
     VariableNames=["date" "essai" "graineDecoupage" "graineEntrainement" ...
-    "taille" "filtres" "optimiseur" "tauxApprentissage" "calendrierTaux" "tailleLot" "epochs" ...
+    "taille" "filtres" "optimiseur" "tauxApprentissage" "calendrierTaux" "augmentation" "tailleLot" "epochs" ...
     "parametres" "exactitudeTrain" "exactitudeVal" "f1Val" "frugalite" "dureeMin"]);
 journal = fullfile(outputFolder, "essais.csv");
 
