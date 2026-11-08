@@ -44,9 +44,10 @@ Projet_TIP/
 ├── suiviCNN.txt
 ├── .gitignore
 ├── built/                <- créé par CNN_Projet.m, ignoré par git
-│   ├── predictions.json
 │   ├── essais.csv
-│   └── historique_<essai>_graine<n>.csv
+│   ├── historique_<essai>_graine<n>.csv
+│   ├── predictions_<essai>_graine<n>.json
+│   └── reseau_<essai>_graine<n>.mat
 └── food-11/              <- ignoré par git
     ├── train/
     │   ├── bread/            (1356 images)
@@ -72,7 +73,7 @@ Contrôle rapide : 13 296 images dans `train`, 3 097 dans `test`.
 1. Ouvrez MATLAB.
 2. **Placez le dossier courant de MATLAB à la racine du dépôt** (`Projet_TIP/`). Les chemins dans le code sont relatifs (`"food-11/train"`), donc lancer le script depuis un autre dossier fait échouer `imageDatastore`.
 3. Lancez `prepareData.m` pour vérifier que les données sont bien trouvées (affiche 16 images au hasard).
-4. Lancez `CNN_Projet.m` pour le pipeline complet. Les prédictions du test sont écrites dans `built/predictions.json` (le dossier `built/` est créé automatiquement). Ce fichier est écrasé à chaque exécution : renommez-le si vous voulez garder plusieurs versions.
+4. Lancez `CNN_Projet.m` pour le pipeline complet. Les prédictions du test sont écrites dans `built/predictions_<essai>_graine<n>.json` (le dossier `built/` est créé automatiquement), un fichier par essai. Par défaut, le script reproduit le meilleur réglage à ce stade (essai 3 de `suiviCNN.txt`, environ 30 min sur le CPU d'un Mac).
 
 ### 1.5 Faire un essai
 
@@ -87,7 +88,9 @@ Tous les réglages sont regroupés dans le bloc `Réglages de l'essai` en haut d
 
 Chaque exécution ajoute une ligne dans `built/essais.csv` (réglages, nombre de paramètres, exactitude train et validation, F1 macro, frugalité, durée). Si les colonnes du journal changent, l'ancien fichier est archivé sous `built/essais_ancien_<date>.csv` et un nouveau journal est commencé.
 
-Chaque exécution écrit aussi `built/historique_<essai>_graine<n>.csv`, avec une ligne par epoch (taux d'apprentissage de l'epoch `tauxEpoch`, perte et exactitude sur le train et sur la validation), pour tracer les courbes et faire le diagnostic biais/variance même sans fenêtre graphique. Les colonnes `perteTrainLots` et `exactitudeTrainLots` sont des moyennes des lots de l'epoch, mesurées pendant l'apprentissage : elles ne sont pas égales à l'exactitude train finale du journal, qui reste la référence pour comparer train et validation. **Changer `cfg.nomEssai` à chaque nouveau réglage**, sinon l'historique de l'essai précédent est écrasé.
+Chaque exécution écrit aussi `built/historique_<essai>_graine<n>.csv`, avec une ligne par epoch (taux d'apprentissage de l'epoch `tauxEpoch`, perte et exactitude sur le train et sur la validation), pour tracer les courbes et faire le diagnostic biais/variance même sans fenêtre graphique. Les colonnes `perteTrainLots` et `exactitudeTrainLots` sont des moyennes des lots de l'epoch, mesurées pendant l'apprentissage : elles ne sont pas égales à l'exactitude train finale du journal, qui reste la référence pour comparer train et validation. Chaque exécution sauvegarde enfin le réseau entraîné dans `built/reseau_<essai>_graine<n>.mat` (environ 380 Ko) : réseau, réglages, noms des classes, fichiers et vraies classes des images de validation. On peut ainsi refaire des prédictions, la matrice de confusion ou des figures sans réentraîner. Ce fichier binaire reste dans `built/`, hors du dépôt.
+
+Les fichiers propres à un essai portent son nom et sa graine. **Changer `cfg.nomEssai` à chaque nouveau réglage**, sinon les fichiers de l'essai précédent sont écrasés.
 
 ### 1.6 (Optionnel) Utiliser le GPU
 
@@ -126,10 +129,10 @@ Décommenter seulement la ligne `ExecutionEnvironment` provoque une erreur de sy
    - `rng(cfg.graineDecoupage, "twister")` puis `splitEachLabel(..., 0.8, "randomized")` : 80 % entraînement / 20 % validation, en gardant les proportions de chaque classe (env. 10 637 / 2 659 images), toujours le même découpage ;
    - `augmentedImageDatastore` : redimensionne les images à `cfg.tailleImage`, convertit celles en niveaux de gris en RGB (`ColorPreprocessing="gray2rgb"`) et les fournit au réseau par lots. La normalisation est faite par la couche d'entrée du réseau (centrage sur la moyenne du train). Sans fonction de lecture personnalisée, la lecture est environ 9 fois plus rapide et une epoch environ 4 fois plus rapide (mesuré sur Mac, CPU).
 3. **Réseau** : le bloc du TP CIFAR-10 (convolution 3×3 avec padding "same", batch norm, ReLU, max pooling 2×2) répété une fois par valeur de `cfg.filtres` (16, 32, 64 puis 128 filtres), suivi d'un global average pooling, d'une couche dense de 11 sorties et d'un softmax. Le global average pooling réduit chaque carte de caractéristiques à sa moyenne : la couche dense n'a plus que 128 × 11 poids, et le nombre de paramètres (99 339, pénalité de frugalité 0,027) ne dépend pas de la taille des images. Le réseau à une couche du TP en avait env. 350 000, presque tous dans sa couche dense. Si `cfg.afficherCourbes` est vrai, affichage de 25 images d'entraînement et de l'architecture (`analyzeNetwork`).
-4. **Entraînement** : `trainnet` avec les réglages de `cfg` (par défaut adam, taux d'apprentissage 0,001 constant, lots de 128, 20 epochs), validation évaluée une fois par epoch. `OutputNetwork="last-iteration"` : on garde le réseau de la dernière epoch, et non celui de la meilleure epoch sur la validation, pour que les scores de validation ne soient pas optimistes et que l'exactitude train corresponde à la fin de l'entraînement. `rng(cfg.graineEntrainement, "twister")` juste avant fixe les poids de départ et l'ordre des images. Si `cfg.afficherCourbes` est vrai, la fenêtre de MATLAB est complétée par les courbes lissées du TP.
-5. **Historique** : juste après l'entraînement, une ligne par epoch dans `built/historique_<essai>_graine<n>.csv` (voir 1.5), écrite avant l'évaluation pour être gardée même si la suite plante.
+4. **Entraînement** : `trainnet` avec les réglages de `cfg` (par défaut adam, taux d'apprentissage 0,001 avec calendrier `cosine`, lots de 128, 40 epochs), validation évaluée une fois par epoch. `OutputNetwork="last-iteration"` : on garde le réseau de la dernière epoch, et non celui de la meilleure epoch sur la validation, pour que les scores de validation ne soient pas optimistes et que l'exactitude train corresponde à la fin de l'entraînement. `rng(cfg.graineEntrainement, "twister")` juste avant fixe les poids de départ et l'ordre des images. Si `cfg.afficherCourbes` est vrai, la fenêtre de MATLAB est complétée par les courbes lissées du TP.
+5. **Sauvegarde et historique** : juste après l'entraînement, le réseau est sauvegardé dans `built/reseau_<essai>_graine<n>.mat` et l'historique par epoch dans `built/historique_<essai>_graine<n>.csv` (voir 1.5), avant l'évaluation, pour être gardés même si la suite plante.
 6. **Évaluation** : exactitude sur le train (pour repérer un sous-apprentissage), puis `evaluerReseau` sur la validation : exactitude, F1 de chaque classe, F1 macro, nombre de paramètres et score de frugalité, avec la matrice de confusion si `cfg.afficherCourbes` est vrai. Le test n'ayant pas d'étiquettes, on prédit seulement ses classes.
-7. **Export JSON** : les prédictions du test sont écrites dans `built/predictions.json` au format attendu par le serveur (`{"0": "bread", ...}`). Chaque prédiction est associée au nom de son fichier image.
+7. **Export JSON** : les prédictions du test sont écrites dans `built/predictions_<essai>_graine<n>.json` au format attendu par le serveur (`{"0": "bread", ...}`). Chaque prédiction est associée au nom de son fichier image.
 8. **Journal** : une ligne ajoutée dans `built/essais.csv`.
 
 ### Notions utiles
@@ -162,10 +165,10 @@ Décommenter seulement la ligne `ExecutionEnvironment` provoque une erreur de sy
 - [ ] Gestion du déséquilibre des classes (rice : 376 images contre 2000 pour dessert et soup)
 - [x] Graines aléatoires fixes (`rng`) : découpage train/validation et entraînement reproductibles
 - [x] Outils de réglage : réglages regroupés en tête de script, lecture des images accélérée, journal des essais (`built/essais.csv`) et historique par epoch (`built/historique_<essai>_graine<n>.csv`)
-- [ ] Réseau n°1 (CNN « maison ») : architecture de base en place (4 blocs + global average pooling, 99 339 paramètres), pas encore entraînée ni réglée
+- [ ] Réseau n°1 (CNN « maison ») : 4 blocs + global average pooling, 99 339 paramètres. Meilleur résultat à ce stade : frugalité 0,592 sur la validation (calendrier `cosine`, 40 epochs). Réglage en cours, détail des essais dans `suiviCNN.txt`
 - [ ] Réseau n°2 (par ex. transfer learning sur un réseau pré-entraîné léger)
 - [x] Évaluation sur la validation : exactitude, F1 par classe, F1 macro, nombre de paramètres, frugalité, matrice de confusion (`evaluerReseau.m`)
-- [x] Génération du JSON de prédictions sur le test (`built/predictions.json`)
+- [x] Génération du JSON de prédictions sur le test (`built/predictions_<essai>_graine<n>.json`) et sauvegarde du réseau entraîné (`built/reseau_<essai>_graine<n>.mat`)
 - [ ] Rapport
 
 ### Problèmes connus

@@ -9,7 +9,8 @@ clc
 %% Réglages de l'essai
 % Pour un nouvel essai, on ne modifie que ce bloc. Chaque exécution ajoute
 % une ligne dans built/essais.csv avec ces réglages et les scores obtenus.
-cfg.nomEssai           = "base_4blocs";
+% Valeurs par défaut : meilleur réglage à ce stade (essai 3 de suiviCNN.txt).
+cfg.nomEssai           = "cosine_40ep";
 cfg.graineDecoupage    = 42;      % ne jamais changer : même validation pour tout le groupe
 cfg.graineEntrainement = 1;       % 1 par défaut ; 2 et 3 pour mesurer la variabilité
 cfg.tailleImage        = [128 128];
@@ -20,9 +21,9 @@ cfg.tauxApprentissage  = 0.001;   % taux de départ
 % "cosine" = décroît en douceur jusqu'au taux de départ x 1e-5, atteint à la
 % dernière epoch (qui ne met alors presque plus à jour les poids, seulement
 % les statistiques de la batch norm)
-cfg.calendrierTaux     = "none";
+cfg.calendrierTaux     = "cosine";
 cfg.tailleLot          = 128;
-cfg.nbEpochs           = 20;      % à ajuster après la mesure du temps par epoch
+cfg.nbEpochs           = 40;      % environ 30 min sur le CPU du Mac
 cfg.afficherCourbes    = true;    % false pour enchaîner des essais sans fenêtre graphique
 
 % Valeur inattendue : erreur tout de suite plutôt qu'à la fin du script
@@ -143,19 +144,37 @@ dureeMinutes = toc(chrono) / 60;
 fprintf("Durée de l'entraînement : %.1f min\n", dureeMinutes);
 
 % Les fichiers produits vont dans le dossier "built" (au même niveau que
-% food-11), créé automatiquement s'il n'existe pas encore
+% food-11), créé automatiquement s'il n'existe pas encore. Les fichiers
+% propres à un essai portent son nom et sa graine (par exemple
+% reseau_base_4blocs_graine1.mat) : ils ne sont écrasés que si l'on relance
+% le même essai avec la même graine. Changer cfg.nomEssai à chaque nouveau
+% réglage.
 outputFolder = "built";
 if ~isfolder(outputFolder)
     mkdir(outputFolder);
 end
+suffixeEssai = cfg.nomEssai + "_graine" + cfg.graineEntrainement;
+
+%% Sauvegarde du réseau entraîné
+% built/reseau_<essai>_graine<n>.mat contient le réseau, les réglages, les
+% noms des classes, ainsi que les fichiers et vraies classes des images de
+% validation. On peut ainsi refaire des prédictions, la matrice de
+% confusion ou des figures sans réentraîner : load, puis recréer un
+% augmentedImageDatastore (cfg.tailleImage, ColorPreprocessing="gray2rgb")
+% sur les images voulues, puis minibatchpredict et scores2label.
+% Fichier binaire : il reste dans built/, hors du dépôt.
+fichiersValidation    = imgDataValidation.Files;
+etiquettesValidation  = imgDataValidation.Labels;
+fichierReseau = fullfile(outputFolder, "reseau_" + suffixeEssai + ".mat");
+save(fichierReseau, "net", "cfg", "classNames", "fichiersValidation", "etiquettesValidation");
+fprintf("Réseau entraîné sauvegardé dans %s\n", fichierReseau);
 
 %% Historique de l'entraînement
 % Une ligne par epoch dans built/historique_<essai>_graine<n>.csv, pour
 % tracer les courbes et faire le diagnostic biais/variance même quand le
 % script tourne sans fenêtre graphique. Écrit juste après l'entraînement,
-% pour être gardé même si la suite du script plante. Le fichier est écrasé
-% si on relance le même essai avec la même graine : changer cfg.nomEssai à
-% chaque nouveau réglage. Exactitudes entre 0 et 1, comme dans le journal.
+% pour être gardé même si la suite du script plante. Exactitudes entre 0
+% et 1, comme dans le journal.
 % Côté train (colonnes "Lots") : moyenne des lots de l'epoch, mesurée
 % pendant l'apprentissage. Deux effets jouent en sens opposés : la moyenne
 % mélange des états successifs du réseau (les premiers lots de l'epoch sont
@@ -187,8 +206,7 @@ exactitudeVal(trouve) = histoVal.Accuracy(rangVal(trouve)) / 100;
 
 historique = table(epoch, tauxEpoch, perteTrainLots, exactitudeTrainLots, ...
     perteVal, exactitudeVal);
-fichierHistorique = fullfile(outputFolder, "historique_" + cfg.nomEssai + ...
-    "_graine" + cfg.graineEntrainement + ".csv");
+fichierHistorique = fullfile(outputFolder, "historique_" + suffixeEssai + ".csv");
 writetable(historique, fichierHistorique);
 fprintf("Historique de l'entraînement écrit dans %s\n", fichierHistorique);
 
@@ -229,7 +247,7 @@ testLabelsPred = scores2label(testScores, classNames);
 % (0, 1, 10, 100, ...).
 [~, testIds] = fileparts(imgDataTest.Files);
 predictions = containers.Map(testIds, cellstr(testLabelsPred));
-jsonFile = fullfile(outputFolder, "predictions.json");
+jsonFile = fullfile(outputFolder, "predictions_" + suffixeEssai + ".json");
 writelines(jsonencode(predictions, PrettyPrint=true), jsonFile);
 fprintf("Prédictions du test écrites dans %s (%d images)\n", jsonFile, predictions.Count);
 

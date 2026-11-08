@@ -8,8 +8,10 @@ rédaction du rapport.
 
 Les chiffres bruts sont aussi dans built/essais.csv (une ligne par essai)
 et les courbes dans built/historique_<essai>_graine<n>.csv (une ligne par
-epoch). Ces fichiers ne sont pas sur GitHub : les résultats importants
-sont donc recopiés ici.
+epoch). Chaque essai produit aussi ses prédictions du test
+(predictions_<essai>_graine<n>.json) et son réseau entraîné
+(reseau_<essai>_graine<n>.mat). Ces fichiers ne sont pas sur GitHub : les
+résultats importants sont donc recopiés ici.
 
 
 RÈGLES DE LA DÉMARCHE
@@ -78,6 +80,16 @@ CHOIX DE CONCEPTION (avec leur justification)
   correspondrait plus à la fin de l'entraînement, ce qui fausserait le
   diagnostic biais/variance.
 
+[2026-11-08] Fichiers de sortie propres à chaque essai
+  Prédictions (predictions_<essai>_graine<n>.json), historique et réseau
+  entraîné (reseau_<essai>_graine<n>.mat, environ 380 Ko : réseau,
+  réglages, noms des classes, fichiers et vraies classes des images de
+  validation) portent le nom de l'essai et sa graine.
+  Plus rien n'est écrasé d'un essai à l'autre, et le réseau rechargé
+  redonne exactement les mêmes prédictions (vérifié sur les 3 097 images
+  du test) : pas besoin de réentraîner pour soumettre ou faire des
+  figures.
+
 
 ESSAIS
 ======
@@ -140,14 +152,126 @@ Décision    : ne pas mesurer tout de suite le bruit avec les graines 2 et 3
               changer). Traiter d'abord le biais : calendrier de taux
               d'apprentissage décroissant, puis entraînement plus long.
 
+----------------------------------------------------------------------
+ESSAI 2 : cosine_20ep (2026-11-08), taux d'apprentissage décroissant
+----------------------------------------------------------------------
+Pourquoi    : l'essai 1 montrait du biais et une validation instable en fin
+              d'entraînement. Hypothèse : un taux qui décroît stabilise la
+              fin d'entraînement et fait monter le train.
+Changement  : calendrier "cosine" (le taux passe en douceur de 0.001 à
+              0.001 x 1e-5 à la dernière epoch). Seul changement par
+              rapport à l'essai 1.
+Réglages    : 128x128, adam, taux de départ 0.001, cosine, lots de 128,
+              20 epochs, graine 1. Code du commit f3c0326.
+Durée       : 13.0 min sur le CPU du Mac (environ 39 s par epoch).
+Résultats   : exactitude train finale 66.8 % (essai 1 : 61.2 %)
+              validation 59.9 % (essai 1 : 53.3 %)
+              F1 macro 0.569, frugalité 0.542 (essai 1 : 0.487)
+F1 par classe :
+              vegetable-fruit 0.76, soup 0.74, meat 0.67, noodles-pasta
+              0.63, seafood 0.60, fried 0.56, dessert 0.55, egg 0.52,
+              bread 0.43, rice 0.43, dairy 0.36
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.96               0.33
+                5   8.9e-4          1.47               0.44
+               10   5.4e-4          1.24               0.51
+               15   1.6e-4          1.09               0.56
+               18   2.7e-5          1.05               0.60
+               20   1e-8            1.04               0.60
+Lecture     : 1. Hypothèse confirmée : la validation ne fait plus le yo-yo
+                 en fin d'entraînement, elle monte régulièrement de 0.590
+                 à 0.599 entre les epochs 16 et 20. Sur ces dernières
+                 epochs, le score ne dépend plus de l'epoch où l'on
+                 s'arrête (le calendrier cosine dépend toutefois du
+                 nombre d'epochs choisi : on compare des essais complets).
+                 Argument supplémentaire : la validation finale (0.599)
+                 dépasse la meilleure epoch de l'essai 1 (0.538, epoch 13).
+              2. +0.055 de frugalité en changeant une seule ligne.
+              3. Le biais reste le problème principal (train 67 %), écart
+                 train/validation d'environ 7 points.
+Décision    : garder "cosine" et entraîner plus longtemps (essai 3).
+
+----------------------------------------------------------------------
+ESSAI 3 : cosine_40ep (2026-11-08), entraînement deux fois plus long
+----------------------------------------------------------------------
+Pourquoi    : réduire encore le biais en entraînant plus longtemps (levier
+              "train longer" de la méthode du cours).
+Changement  : 40 epochs au lieu de 20 (le calendrier cosine s'étale sur
+              les 40 epochs). Seul changement par rapport à l'essai 2.
+Réglages    : 128x128, adam, taux de départ 0.001, cosine, lots de 128,
+              40 epochs, graine 1. Code du commit f3c0326.
+Durée       : 30.5 min sur le CPU du Mac (environ 46 s par epoch, contre
+              39 s à l'essai 2 pour le même réseau : le Mac a sans doute
+              été sollicité en parallèle).
+Résultats   : exactitude train finale 77.8 % (essai 2 : 66.8 %)
+              validation 63.7 % (essai 2 : 59.9 %)
+              F1 macro 0.619, frugalité 0.592 (essai 2 : 0.542)
+              Meilleur résultat à ce stade. Pour situer : les exemples
+              illustratifs du sujet donnent 0.57 (3.5 M de paramètres, F1
+              0.80) et 0.54 (11.6 M, F1 0.82). Ce sont des exemples
+              fictifs, et notre 0.592 est un score de validation, pas de
+              test.
+F1 par classe :
+              soup 0.79, vegetable-fruit 0.79, noodles-pasta 0.71, meat
+              0.68, seafood 0.64, fried 0.60, dessert 0.57, egg 0.57,
+              rice 0.52, bread 0.49, dairy 0.45
+              Toutes les classes progressent, surtout dairy et rice
+              (+0.09), deux des trois plus faibles, et noodles-pasta
+              (+0.08). bread, pourtant faible, ne gagne que +0.05 et meat
+              presque rien (+0.01).
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.96               0.33
+               10   8.7e-4          1.26               0.48
+               20   5.2e-4          0.95               0.56
+               25   3.2e-4          0.87               0.56
+               26   2.9e-4          0.85               0.61  (pic isolé)
+               27   2.5e-4          0.82               0.58
+               30   1.5e-4          0.79               0.61
+               35   4.0e-5          0.74               0.63
+               40   1e-8            0.73               0.64
+Lecture     : 1. Le biais a nettement baissé : train de 61 % (essai 1) à
+                 78 %.
+              2. La variance augmente plus vite que le biais ne baisse :
+                 en doublant les epochs (essai 2 vers essai 3), le train
+                 gagne 11.0 points (66.8 à 77.8 %) mais la validation
+                 seulement 3.8 points (59.9 à 63.7 %). L'écart
+                 train/validation double, de 6.9 à 14.1 points. Entraîner
+                 encore plus longtemps creuserait surtout l'écart, pour
+                 plus de 30 min par essai.
+              3. Le biais reste important : 22 % d'erreurs sur le train.
+                 La capacité (plus de filtres ou 5e bloc) reste donc une
+                 piste sérieuse.
+              4. Classes les plus faibles : dairy, bread, rice.
+              5. À cet essai, le script écrivait encore
+                 built/predictions.json (écrasé à chaque essai) : le
+                 fichier a été renommé à la main en
+                 predictions_cosine_40ep_graine1.json. Les
+                 prédictions des essais 1 et 2 sont perdues, et le réseau
+                 de l'essai 3 n'a pas été sauvegardé (sauvegarde ajoutée
+                 juste après). Relancer le script avec ses réglages par
+                 défaut le reproduit à l'identique sur le même Mac.
+Décision    : 1. Mesurer d'abord le bruit de notre réseau : graines 2 et
+                 3 sur le réglage de l'essai 2 (20 epochs, plus rapide).
+                 Notre seule mesure de bruit (écart de F1 de 0.027 entre
+                 deux graines) vient du réseau du TP après 1 epoch, pas
+                 représentative. Sans elle, on ne pourra pas dire si les
+                 prochains essais, aux gains attendus plus petits, font
+                 vraiment mieux.
+              2. Puis s'attaquer à l'écart train/validation avec
+                 l'augmentation de données (0 paramètre ajouté, donc pas
+                 de coût en frugalité).
+
 
 PROCHAINS ESSAIS PRÉVUS
 =======================
 
-- Essai 2 : calendrier "cosine", 20 epochs (seul changement par rapport à
-  l'essai 1). Hypothèse : validation plus stable en fin d'entraînement et
-  train plus haut.
-- Essai 3 : calendrier "cosine", 40 epochs. Hypothèse : moins de biais en
-  entraînant plus longtemps.
-- Si le train reste bas : plus de capacité (plus de filtres ou 5e bloc),
-  en surveillant le coût en frugalité.
+- Mesure du bruit : réglage de l'essai 2 avec les graines 2 et 3
+  (environ 26 min en tout).
+- Essai 4 : augmentation de données sur le train (retournements
+  horizontaux, petites translations et petits zooms aléatoires), cosine,
+  40 epochs. Seul changement par rapport à l'essai 3. Hypothèse : écart
+  train/validation réduit et validation plus haute.
+- Ensuite si besoin : dropout avant la couche dense, poids de classes pour
+  dairy, bread et rice, plus de capacité (plus de filtres ou 5e bloc) en
+  surveillant le coût en frugalité.
+- Configuration finale : graines 1, 2 et 3, moyenne et écart-type.
