@@ -466,13 +466,85 @@ Décision    : adopter 5D. Nouvelles valeurs par défaut du script :
               "aug_5blocs". Prochain seuil à battre : frugalité 0.672.
 
 
+----------------------------------------------------------------------
+ESSAI 6 : aug_5blocs_160 (2026-11-08), images en 160x160
+----------------------------------------------------------------------
+Pourquoi    : à l'essai 5D, le train reste à 83 % : il reste du biais.
+              Hypothèse : des images plus grandes donnent plus de détails
+              au réseau. Grâce au global average pooling, la taille des
+              images ne change pas le nombre de paramètres : aucun coût
+              en frugalité, seulement en temps de calcul.
+Changement  : images d'entrée en 160x160 au lieu de 128x128 (sortie du
+              dernier bloc en 5x5 au lieu de 4x4). Seul changement par
+              rapport à l'essai 5D. L'augmentation n'est pas modifiée :
+              ses translations sont mesurées sur l'image d'origine.
+              Critère fixé avant de lancer : frugalité supérieure à 0.672
+              (essai 5D + seuil de 0.02).
+Réglages    : 160x160, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation, lots de 128, 40 epochs,
+              graine 1. Code du commit 21b0ce1.
+Durée       : 42.9 min sur le CPU du Mac, 1.37 fois l'essai 5D (1.56
+              attendu d'après le nombre de pixels).
+Résultats   :                     essai 5D    essai 6
+              taille des images   128x128     160x160
+              paramètres          191 787     191 787
+              exactitude train    82.7 %      81.5 %
+              validation          70.9 %      70.9 %
+              écart               11.8 pts    10.5 pts
+              perte validation    0.858       0.839
+              F1 macro            0.701       0.699
+              frugalité           0.652       0.651
+F1 par classe :
+              vegetable-fruit 0.89, soup 0.84, meat 0.75, noodles-pasta
+              0.75, seafood 0.73, fried 0.70, egg 0.68, rice 0.64,
+              dessert 0.61, dairy 0.56, bread 0.56
+              Par rapport à 5D : baisse pour rice (-0.05) et seafood
+              (-0.03), hausse pour vegetable-fruit (+0.03) ; les autres
+              classes bougent de 0.02 au plus. rice reste dans son bruit
+              habituel (jusqu'à 0.09) ; seafood et vegetable-fruit sont à
+              la limite du bruit des grandes classes (moins de 0.03).
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.86               0.38
+               10   8.7e-4          1.13               0.51
+               20   5.2e-4          0.84               0.63
+               30   1.5e-4          0.66               0.69
+               35   4.0e-5          0.62               0.71
+               40   1e-8            0.61               0.71
+              Validation stable autour de 0.708 sur les 6 dernières
+              epochs (taux presque nul).
+Lecture     : 1. Aucun effet : -0.002 de frugalité, dans le bruit, et
+                 0.021 sous le seuil de 0.672. La validation est identique
+                 (70.93 % contre 70.89 %).
+              2. Le biais ne baisse pas : le train recule même un peu
+                 (81.5 % contre 82.7 %, perte train (lots) 0.61 contre
+                 0.58), dans le bruit (le train variait de 1.6 point
+                 entre graines). L'hypothèse "plus de détails, moins de
+                 biais" n'est pas confirmée.
+              3. Hypothèse (non vérifiée) : les filtres couvrent la même
+                 zone en pixels ; sur une image plus grande, chaque
+                 neurone voit donc une part plus petite du plat, ce qui
+                 peut annuler le gain de détails.
+              4. L'écart train/validation baisse un peu (10.5 contre
+                 11.8 points), mais parce que le train baisse, pas parce
+                 que la validation monte. Probablement du bruit aussi.
+Décision    : ne pas adopter. On garde 128x128, qui donne le même score
+              en environ 27 % de temps en moins (31.4 contre 42.9 min).
+              Le seuil à battre reste 0.672.
+
+
 PROCHAINS ESSAIS PRÉVUS
 =======================
 
-- Essai 6 : images d'entrée en 160x160 au lieu de 128x128. Grâce au global
-  average pooling, aucun paramètre ajouté, donc aucun coût en frugalité.
-  Environ 1.5 fois plus de calculs (une cinquantaine de minutes).
-- Ensuite si besoin : poids de classes pour bread et dairy (F1 macro),
-  dropout avant la couche dense si l'écart train/validation continue de
-  se creuser.
+- Avant l'essai 7 : matrice de confusion de l'essai 5D (réseau sauvegardé,
+  sans réentraîner) pour voir avec quelles classes bread et dairy sont
+  confondues.
+- Essai 7 : poids de classes (aucun paramètre ajouté). Effet attendu
+  surtout sur dairy et rice, les deux plus faibles des petites classes
+  (573 et 376 images dans le train complet ; noodles-pasta, 587 images,
+  atteint pourtant un F1 de 0.75). bread a 1 356 images et reste la plus
+  faible. Hypothèse (à vérifier avec la matrice de confusion) : bread
+  ressemble à d'autres plats, son problème ne vient pas du nombre
+  d'images.
+  Autre piste : dropout avant la couche dense contre l'écart
+  train/validation (11.8 points).
 - Configuration finale : graines 1, 2 et 3, moyenne et écart-type.
