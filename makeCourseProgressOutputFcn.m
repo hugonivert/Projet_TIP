@@ -1,7 +1,7 @@
 function outputFcn = makeCourseProgressOutputFcn(numTrainingObservations, miniBatchSize, maxEpochs, smoothingWindow)
 % Create a live training plot with smoothed training curves and epoch bands.
-% The test set is passed to trainnet as ValidationData, but is labeled as
-% the test set here to match the terminology used in these exercises.
+% The validation set is passed to trainnet as ValidationData.
+% Adapted from the TP CIFAR-10 file, where this curve was labeled "Test set".
 
 iterationsPerEpoch = ceil(numTrainingObservations / miniBatchSize);
 totalIterations = iterationsPerEpoch * maxEpochs;
@@ -22,7 +22,7 @@ accuracyTestLine = animatedline(axAccuracy, ...
     Color=[0.8500 0.3250 0.0980], LineWidth=1.4, ...
     Marker="o", MarkerSize=4);
 legend(axAccuracy, [accuracyTrainLine accuracyTestLine], ...
-    "Training (smoothed)", "Test set", Location="southeast");
+    "Training (smoothed)", "Validation set", Location="southeast");
 
 axLoss = nexttile(layout);
 hold(axLoss, "on");
@@ -39,7 +39,7 @@ lossTestLine = animatedline(axLoss, ...
     Color=[0.8500 0.3250 0.0980], LineWidth=1.4, ...
     Marker="o", MarkerSize=4);
 legend(axLoss, [lossTrainLine lossTestLine], ...
-    "Training (smoothed)", "Test set", Location="northeast");
+    "Training (smoothed)", "Validation set", Location="northeast");
 
 title(layout, sprintf("Training progress (%d-iteration moving average)", smoothingWindow));
 

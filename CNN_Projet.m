@@ -9,14 +9,15 @@ clc
 %% Réglages de l'essai
 % Pour un nouvel essai, on ne modifie que ce bloc. Chaque exécution ajoute
 % une ligne dans built/essais.csv avec ces réglages et les scores obtenus.
-cfg.nomEssai           = "tp_1couche";
+cfg.nomEssai           = "base_4blocs";
 cfg.graineDecoupage    = 42;      % ne jamais changer : même validation pour tout le groupe
 cfg.graineEntrainement = 1;       % 1 par défaut ; 2 et 3 pour mesurer la variabilité
 cfg.tailleImage        = [128 128];
-cfg.optimiseur         = "sgdm";
+cfg.filtres            = [16 32 64 128];   % un bloc de convolution par valeur
+cfg.optimiseur         = "adam";
 cfg.tauxApprentissage  = 0.001;
-cfg.tailleLot          = 500;
-cfg.nbEpochs           = 16;
+cfg.tailleLot          = 128;
+cfg.nbEpochs           = 20;      % à ajuster après la mesure du temps par epoch
 cfg.afficherCourbes    = true;    % false pour enchaîner des essais sans fenêtre graphique
 
 %% Chargement des données
@@ -47,15 +48,28 @@ augValidation = augmentedImageDatastore(cfg.tailleImage, imgDataValidation, Colo
 augTest       = augmentedImageDatastore(cfg.tailleImage, imgDataTest, ColorPreprocessing="gray2rgb");
 
 %% Réseau
-% Réseau de départ du TP CIFAR-10 (une couche de convolution). La couche
-% softmax finale donne les probabilités de chaque classe ; la fonction de
-% perte est indiquée séparément dans trainnet.
-layers = [
-    imageInputLayer(inputSize, Name="input")
-    convolution2dLayer(3, 8, Name="conv")
-    batchNormalizationLayer(Name="batchnorm")
-    reluLayer(Name="relu")
-    maxPooling2dLayer(2, Stride=2, Name="maxpooling")
+% Le bloc du TP CIFAR-10 (convolution 3x3, batch norm, ReLU, max pooling)
+% est répété une fois par valeur de cfg.filtres. Le padding "same" garde
+% la taille des cartes de caractéristiques à la convolution, ce qui permet
+% à chaque pooling de la diviser exactement par 2. Avec [16 32 64 128],
+% une image 128x128x3 arrive en 8x8x128 à la sortie du dernier bloc.
+% Le global average pooling remplace chaque carte de caractéristiques par
+% sa moyenne. La couche entièrement connectée n'a alors que 128 x 11 poids
+% (contre 63 x 63 x 8 x 11 pour le réseau du TP appliqué à des images
+% 128x128), et le nombre de paramètres ne dépend plus de la taille des
+% images (99 339 avec [16 32 64 128]).
+% La couche softmax finale donne les probabilités de chaque classe ; la
+% fonction de perte est indiquée séparément dans trainnet.
+layers = imageInputLayer(inputSize, Name="input");
+for b = 1:numel(cfg.filtres)
+    layers = [layers
+        convolution2dLayer(3, cfg.filtres(b), Padding="same", Name="conv" + b)
+        batchNormalizationLayer(Name="batchnorm" + b)
+        reluLayer(Name="relu" + b)
+        maxPooling2dLayer(2, Stride=2, Name="maxpool" + b)]; %#ok<AGROW>
+end
+layers = [layers
+    globalAveragePooling2dLayer(Name="gap")
     fullyConnectedLayer(numel(classNames), Name="fullyconnected")
     softmaxLayer(Name="softmax")];
 
@@ -73,6 +87,13 @@ end
 % qu'aux prédictions (export JSON).
 % trainnet ignore le dernier lot incomplet : une epoch compte
 % floor(nombre d'images / taille de lot) itérations.
+% OutputNetwork="last-iteration" : on récupère le réseau de la dernière
+% epoch. Sinon, trainnet renverrait celui de l'epoch où la perte de
+% validation est la plus basse : les scores de validation seraient un peu
+% optimistes (la validation servirait aussi à choisir l'epoch) et
+% l'exactitude train ne correspondrait plus à la fin de l'entraînement,
+% ce qui fausserait le diagnostic biais/variance. Le nombre d'epochs se
+% règle plutôt à partir des courbes.
 iterationsParEpoch = floor(numel(imgDataTrain.Files) / cfg.tailleLot);
 
 if cfg.afficherCourbes
@@ -94,6 +115,7 @@ options = trainingOptions(cfg.optimiseur, ...
     MiniBatchSize=cfg.tailleLot, ...
     ValidationData=augValidation, ...
     ValidationFrequency=iterationsParEpoch, ...   % une validation par epoch
+    OutputNetwork="last-iteration", ...
     Verbose=false, ...
     Plots=courbes, ...
     OutputFcn=suiviEntrainement, ...
@@ -160,11 +182,11 @@ fprintf("Prédictions du test écrites dans %s (%d images)\n", jsonFile, predict
 ligne = table(string(datetime("now", Format="yyyy-MM-dd HH:mm")), cfg.nomEssai, ...
     cfg.graineDecoupage, cfg.graineEntrainement, ...
     string(sprintf("%dx%d", cfg.tailleImage(1), cfg.tailleImage(2))), ...
-    cfg.optimiseur, cfg.tauxApprentissage, cfg.tailleLot, cfg.nbEpochs, ...
+    strjoin(string(cfg.filtres), "-"), cfg.optimiseur, cfg.tauxApprentissage, cfg.tailleLot, cfg.nbEpochs, ...
     resVal.nbParametres, trainAccuracy, resVal.exactitude, resVal.f1Macro, ...
     resVal.frugalite, dureeMinutes, ...
     VariableNames=["date" "essai" "graineDecoupage" "graineEntrainement" ...
-    "taille" "optimiseur" "tauxApprentissage" "tailleLot" "epochs" ...
+    "taille" "filtres" "optimiseur" "tauxApprentissage" "tailleLot" "epochs" ...
     "parametres" "exactitudeTrain" "exactitudeVal" "f1Val" "frugalite" "dureeMin"]);
 journal = fullfile(outputFolder, "essais.csv");
 
