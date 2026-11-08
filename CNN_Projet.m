@@ -15,10 +15,19 @@ cfg.graineEntrainement = 1;       % 1 par défaut ; 2 et 3 pour mesurer la varia
 cfg.tailleImage        = [128 128];
 cfg.filtres            = [16 32 64 128];   % un bloc de convolution par valeur
 cfg.optimiseur         = "adam";
-cfg.tauxApprentissage  = 0.001;
+cfg.tauxApprentissage  = 0.001;   % taux de départ
+% Calendrier du taux (mot-clé uniquement) : "none" = taux constant ;
+% "cosine" = décroît en douceur jusqu'au taux de départ x 1e-5, atteint à la
+% dernière epoch (qui ne met alors presque plus à jour les poids, seulement
+% les statistiques de la batch norm)
+cfg.calendrierTaux     = "none";
 cfg.tailleLot          = 128;
 cfg.nbEpochs           = 20;      % à ajuster après la mesure du temps par epoch
 cfg.afficherCourbes    = true;    % false pour enchaîner des essais sans fenêtre graphique
+
+% Valeur inattendue : erreur tout de suite plutôt qu'à la fin du script
+% (le journal ne pourrait pas être écrit)
+mustBeMember(cfg.calendrierTaux, ["none" "cosine"]);
 
 %% Chargement des données
 trainFolder = "food-11/train";
@@ -93,7 +102,10 @@ end
 % optimistes (la validation servirait aussi à choisir l'epoch) et
 % l'exactitude train ne correspondrait plus à la fin de l'entraînement,
 % ce qui fausserait le diagnostic biais/variance. Le nombre d'epochs se
-% règle plutôt à partir des courbes.
+% règle plutôt à partir des courbes d'un essai à taux constant. Avec
+% cfg.calendrierTaux = "cosine", tout le calendrier dépend de cfg.nbEpochs :
+% l'état à l'epoch k d'un essai de 20 epochs ne correspond pas à un essai
+% de k epochs, donc on compare des essais complets.
 iterationsParEpoch = floor(numel(imgDataTrain.Files) / cfg.tailleLot);
 
 if cfg.afficherCourbes
@@ -110,6 +122,7 @@ end
 
 options = trainingOptions(cfg.optimiseur, ...
     InitialLearnRate=cfg.tauxApprentissage, ...
+    LearnRateSchedule=cfg.calendrierTaux, ...
     MaxEpochs=cfg.nbEpochs, ...
     Shuffle="every-epoch", ...
     MiniBatchSize=cfg.tailleLot, ...
@@ -157,6 +170,9 @@ histoVal   = info.ValidationHistory;
 [groupes, epoch] = findgroups(histoTrain.Epoch);
 perteTrainLots      = splitapply(@mean, histoTrain.Loss, groupes);
 exactitudeTrainLots = splitapply(@mean, histoTrain.Accuracy, groupes) / 100;
+% Taux d'apprentissage de chaque epoch (montre le calendrier). Il est
+% constant sur toute l'epoch, on prend donc celui du premier lot.
+tauxEpoch           = splitapply(@(t) t(1), histoTrain.LearnRate, groupes);
 
 % La validation de fin d'epoch a lieu à l'itération epoch x iterationsParEpoch.
 % Si l'entraînement a été arrêté en cours d'epoch (bouton Stop), la dernière
@@ -169,7 +185,8 @@ trouve = rangVal > 0;
 perteVal(trouve)      = histoVal.Loss(rangVal(trouve));
 exactitudeVal(trouve) = histoVal.Accuracy(rangVal(trouve)) / 100;
 
-historique = table(epoch, perteTrainLots, exactitudeTrainLots, perteVal, exactitudeVal);
+historique = table(epoch, tauxEpoch, perteTrainLots, exactitudeTrainLots, ...
+    perteVal, exactitudeVal);
 fichierHistorique = fullfile(outputFolder, "historique_" + cfg.nomEssai + ...
     "_graine" + cfg.graineEntrainement + ".csv");
 writetable(historique, fichierHistorique);
@@ -221,11 +238,12 @@ fprintf("Prédictions du test écrites dans %s (%d images)\n", jsonFile, predict
 ligne = table(string(datetime("now", Format="yyyy-MM-dd HH:mm")), cfg.nomEssai, ...
     cfg.graineDecoupage, cfg.graineEntrainement, ...
     string(sprintf("%dx%d", cfg.tailleImage(1), cfg.tailleImage(2))), ...
-    strjoin(string(cfg.filtres), "-"), cfg.optimiseur, cfg.tauxApprentissage, cfg.tailleLot, cfg.nbEpochs, ...
+    strjoin(string(cfg.filtres), "-"), cfg.optimiseur, cfg.tauxApprentissage, ...
+    cfg.calendrierTaux, cfg.tailleLot, cfg.nbEpochs, ...
     resVal.nbParametres, trainAccuracy, resVal.exactitude, resVal.f1Macro, ...
     resVal.frugalite, dureeMinutes, ...
     VariableNames=["date" "essai" "graineDecoupage" "graineEntrainement" ...
-    "taille" "filtres" "optimiseur" "tauxApprentissage" "tailleLot" "epochs" ...
+    "taille" "filtres" "optimiseur" "tauxApprentissage" "calendrierTaux" "tailleLot" "epochs" ...
     "parametres" "exactitudeTrain" "exactitudeVal" "f1Val" "frugalite" "dureeMin"]);
 journal = fullfile(outputFolder, "essais.csv");
 
