@@ -768,14 +768,97 @@ Décision    : adopter 60 epochs. Nouvelles valeurs par défaut du script :
               seuil à battre : frugalité 0.693.
 
 
+----------------------------------------------------------------------
+ESSAI 9 : aug_5blocs_60ep_drop30 (2026-11-09), dropout
+----------------------------------------------------------------------
+Pourquoi    : à l'essai 8, l'écart train/validation (15.1 points) est
+              devenu le problème principal. Le dropout est l'un des deux
+              outils de régularisation cités par le cours contre la
+              variance, et il n'ajoute aucun paramètre.
+Changement  : nouvelle option cfg.dropout. Avec 0.3, une couche de
+              dropout est placée entre le global average pooling et la
+              couche dense : pendant l'entraînement, chacune des 128
+              valeurs est mise à zéro avec la probabilité 0.3 (les
+              autres sont multipliées par 1/0.7). Rien n'est effacé sur
+              la validation et le test. Avec 0, le réseau est
+              exactement celui de l'essai 8. Valeur modérée (0.3 plutôt
+              que la valeur classique 0.5) parce qu'il reste du biais
+              (12 % d'erreurs sur le train). Seul changement par rapport
+              à l'essai 8. Reproductibilité vérifiée : deux tests courts
+              avec la même graine donnent exactement les mêmes scores.
+              Critère fixé avant de lancer : frugalité supérieure à
+              0.693, avec un écart qui baisse parce que la validation
+              monte, pas seulement parce que le train baisse.
+Réglages    : 128x128, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation, sans poids de classes,
+              dropout 0.3, lots de 128, 60 epochs, graine 1. Code du
+              commit b4da2e6.
+Durée       : 42.1 min sur le CPU du Mac.
+Résultats   :                     essai 8     essai 9
+              dropout             0           0.3
+              exactitude train    87.9 %      88.2 %
+              validation          72.8 %      72.1 %
+              écart               15.1 pts    16.1 pts
+              perte validation    0.826       0.822
+              F1 macro            0.721       0.716
+              frugalité           0.673       0.668
+F1 par classe :
+              vegetable-fruit 0.88, soup 0.87, noodles-pasta 0.80, meat
+              0.75, seafood 0.72, rice 0.71, egg 0.70, fried 0.69,
+              dessert 0.64, dairy 0.58, bread 0.54
+              Par rapport à l'essai 8 : hausse pour noodles-pasta
+              (+0.03) ; baisse pour seafood (-0.04), meat (-0.03) et
+              rice (-0.02) ; les autres classes bougent de 0.01 au plus.
+              Ces écarts restent à la limite du bruit d'une seule
+              graine.
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.87               0.36
+               10   9.4e-4          1.09               0.55
+               20   7.7e-4          0.82               0.57
+               30   5.1e-4          0.64               0.64
+               40   2.6e-4          0.52               0.68
+               50   6.9e-5          0.45               0.72
+               60   1e-8            0.43               0.72
+              Validation stable autour de 0.721 sur les 6 dernières
+              epochs (taux presque nul).
+Lecture     : 1. Aucun effet : -0.006 de frugalité, dans le bruit, loin
+                 du seuil de 0.693. L'écart ne baisse pas (16.1 contre
+                 15.1 points) et la perte de validation est quasi
+                 identique (0.822 contre 0.826).
+              2. Le dropout ne freine même pas le train (88.2 % contre
+                 87.9 %), ce qui suggère qu'il a peu à régulariser là où
+                 il agit.
+              3. Hypothèse (très probable, non vérifiée) : la couche
+                 dense qui suit le dropout n'a que 1 419 paramètres
+                 (128 x 11 poids + 11 biais), 0.7 % des 191 787 du
+                 réseau. L'apprentissage par coeur se fait donc presque
+                 entièrement dans les couches de convolution, sur
+                 lesquelles ce dropout n'agit qu'indirectement. Avec le
+                 global average pooling, la tête du réseau est déjà
+                 minuscule : un dropout de 0.3 à cet endroit sert peu
+                 (0.5 n'a pas été testé).
+Décision    : ne pas adopter. L'option reste dans le code avec 0 par
+              défaut ; l'essai 8 reste le meilleur réglage (0.673). La
+              piste suivante pour réduire l'écart est d'agir sur les
+              couches de convolution.
+              Note : les pertes et exactitudes "Lots" de cet essai sont
+              mesurées avec le dropout actif, donc pas strictement
+              comparables à celles de l'essai 8.
+
+
 PROCHAINS ESSAIS PRÉVUS
 =======================
 
 - Leviers qui ont marché depuis l'essai 4 : le 5e bloc (essai 5D), puis
   60 epochs (essai 8). Restés dans le bruit : taille des images (essai
-  6), poids de classes (essai 7).
-- Essai 9 : dropout avant la couche dense, avec 60 epochs (aucun
-  paramètre ajouté). Il vise l'écart train/validation de 15.1 points,
-  devenu le problème principal ; le train à 88 % laisse de la marge s'il
-  baisse un peu. Seuil à battre : frugalité 0.693.
+  6), poids de classes (essai 7), dropout avant la couche dense (essai
+  9).
+- Essai 10 : régularisation agissant sur les couches de convolution,
+  sans paramètre ajouté. Deux pistes : régularisation L2 plus forte
+  (0.0005 au lieu de 0.0001 par défaut dans MATLAB), ou augmentation de
+  données plus forte (petites rotations, variations de luminosité et de
+  couleur). Seuil à battre : frugalité 0.693. À savoir pour L2 dans
+  MATLAB : elle s'applique aussi aux paramètres de la batch norm, et avec
+  adam elle s'ajoute au gradient (pas de "weight decay" découplé), ce qui
+  peut en atténuer l'effet.
 - Configuration finale : graines 1, 2 et 3, moyenne et écart-type.
