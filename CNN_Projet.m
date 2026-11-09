@@ -24,6 +24,7 @@ cfg.tauxApprentissage  = 0.001;   % taux de départ
 cfg.calendrierTaux     = "cosine";
 cfg.augmentation       = true;    % true : retournements, translations et zooms aléatoires sur le train
 cfg.poidsClasses       = "aucun"; % "inverse" : les erreurs sur les petites classes comptent plus
+cfg.dropout            = 0;       % probabilité d'effacer chaque valeur avant la couche dense (0 = pas de dropout)
 cfg.tailleLot          = 128;
 cfg.nbEpochs           = 60;      % environ 45 min sur le CPU du Mac
 cfg.afficherCourbes    = true;    % false pour enchaîner des essais sans fenêtre graphique
@@ -32,6 +33,7 @@ cfg.afficherCourbes    = true;    % false pour enchaîner des essais sans fenêt
 % (le journal ne pourrait pas être écrit)
 mustBeMember(cfg.calendrierTaux, ["none" "cosine"]);
 mustBeMember(cfg.poidsClasses, ["aucun" "inverse"]);
+validateattributes(cfg.dropout, "numeric", {"scalar", "real", ">=", 0, "<", 1});
 
 %% Chargement des données
 trainFolder = "food-11/train";
@@ -130,6 +132,14 @@ augTest       = augmentedImageDatastore(cfg.tailleImage, imgDataTest, ColorPrepr
 % (contre 63 x 63 x 8 x 11 pour le réseau du TP appliqué à des images
 % 128x128), et le nombre de paramètres ne dépend plus de la taille des
 % images (191 787 avec [16 32 64 96 128]).
+% Si cfg.dropout > 0, une couche de dropout est placée entre le global
+% average pooling et la couche dense. Pendant l'entraînement seulement,
+% pour chaque image, chaque valeur en sortie du global average pooling
+% (128 avec les filtres par défaut) est mise à zéro avec la probabilité
+% cfg.dropout ; les autres sont multipliées par 1/(1 - cfg.dropout) pour
+% garder en moyenne la même valeur. La couche dense ne peut plus s'appuyer sur quelques valeurs
+% précises, ce qui limite l'apprentissage par coeur. Sur la validation et
+% le test, rien n'est effacé. Cette couche n'a aucun paramètre.
 % La couche softmax finale donne les probabilités de chaque classe ; la
 % fonction de perte (avec ou sans poids de classes) est indiquée
 % séparément dans trainnet.
@@ -142,7 +152,12 @@ for b = 1:numel(cfg.filtres)
         maxPooling2dLayer(2, Stride=2, Name="maxpool" + b)]; %#ok<AGROW>
 end
 layers = [layers
-    globalAveragePooling2dLayer(Name="gap")
+    globalAveragePooling2dLayer(Name="gap")];
+if cfg.dropout > 0
+    layers = [layers
+        dropoutLayer(cfg.dropout, Name="dropout")];
+end
+layers = [layers
     fullyConnectedLayer(numel(classNames), Name="fullyconnected")
     softmaxLayer(Name="softmax")];
 
@@ -248,7 +263,9 @@ fprintf("Réseau entraîné sauvegardé dans %s\n", fichierReseau);
 % reste la référence pour comparer train et validation. Avec
 % cfg.augmentation, ces colonnes sont en plus mesurées sur des images
 % transformées (tâche plus difficile), donc nettement plus basses que
-% l'exactitude train finale, calculée sur les vraies images. Côté validation :
+% l'exactitude train finale, calculée sur les vraies images. Avec
+% cfg.dropout > 0, elles sont aussi mesurées avec le dropout actif, ce qui
+% les abaisse encore. Côté validation :
 % mesure de fin d'epoch, sur le réseau en mode prédiction.
 histoTrain = info.TrainingHistory;
 histoVal   = info.ValidationHistory;
@@ -327,11 +344,11 @@ ligne = table(string(datetime("now", Format="yyyy-MM-dd HH:mm")), cfg.nomEssai, 
     cfg.graineDecoupage, cfg.graineEntrainement, ...
     string(sprintf("%dx%d", cfg.tailleImage(1), cfg.tailleImage(2))), ...
     strjoin(string(cfg.filtres), "-"), cfg.optimiseur, cfg.tauxApprentissage, ...
-    cfg.calendrierTaux, texteAugmentation, cfg.poidsClasses, cfg.tailleLot, cfg.nbEpochs, ...
+    cfg.calendrierTaux, texteAugmentation, cfg.poidsClasses, cfg.dropout, cfg.tailleLot, cfg.nbEpochs, ...
     resVal.nbParametres, trainAccuracy, resVal.exactitude, resVal.f1Macro, ...
     resVal.frugalite, dureeMinutes, ...
     VariableNames=["date" "essai" "graineDecoupage" "graineEntrainement" ...
-    "taille" "filtres" "optimiseur" "tauxApprentissage" "calendrierTaux" "augmentation" "poidsClasses" "tailleLot" "epochs" ...
+    "taille" "filtres" "optimiseur" "tauxApprentissage" "calendrierTaux" "augmentation" "poidsClasses" "dropout" "tailleLot" "epochs" ...
     "parametres" "exactitudeTrain" "exactitudeVal" "f1Val" "frugalite" "dureeMin"]);
 journal = fullfile(outputFolder, "essais.csv");
 
