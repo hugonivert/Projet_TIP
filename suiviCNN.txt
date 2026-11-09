@@ -694,17 +694,88 @@ Décision    : ne pas adopter. L'option reste dans le code avec "aucun"
               l'estimation de l'analyse de l'essai 5D, sous le seuil).
 
 
+----------------------------------------------------------------------
+ESSAI 8 : aug_5blocs_60ep (2026-11-08), 60 epochs au lieu de 40
+----------------------------------------------------------------------
+Pourquoi    : le biais reste le plus gros problème de l'essai 5D
+              (environ 17 % d'erreurs sur le train). Levier "entraîner
+              plus longtemps" du cours, sans paramètre ajouté. À
+              l'essai 3 (sans augmentation), doubler les epochs avait
+              surtout creusé l'écart ; avec l'augmentation, on espère
+              qu'il se creuse moins.
+Changement  : 60 epochs au lieu de 40 (le calendrier cosine s'étale sur
+              les 60 epochs). Seul changement par rapport à l'essai 5D.
+              Critère fixé avant de lancer : frugalité supérieure à 0.672.
+Réglages    : 128x128, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation, sans poids de classes, lots
+              de 128, 60 epochs, graine 1. Code du commit 3ac0bdf.
+Durée       : 42.2 min sur le CPU du Mac (environ 42 s par epoch, contre
+              47 s à l'essai 5D : le Mac était sans doute moins
+              sollicité).
+Résultats   :                     essai 5D    essai 8
+              epochs              40          60
+              exactitude train    82.7 %      87.9 %
+              validation          70.9 %      72.8 %
+              écart               11.8 pts    15.1 pts
+              perte validation    0.858       0.826
+              F1 macro            0.701       0.721
+              frugalité           0.652       0.673
+F1 par classe :
+              vegetable-fruit 0.88, soup 0.87, meat 0.78, seafood 0.77,
+              noodles-pasta 0.76, rice 0.73, egg 0.70, fried 0.69,
+              dessert 0.64, dairy 0.58, bread 0.54
+              Les 11 classes progressent par rapport à 5D : rice
+              (+0.04), egg, meat, dairy et dessert (+0.03), fried,
+              noodles-pasta, soup et vegetable-fruit (+0.02), seafood
+              (+0.01). bread ne gagne presque rien (+0.005).
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.86               0.33
+               10   9.4e-4          1.11               0.50
+               20   7.7e-4          0.83               0.59
+               30   5.1e-4          0.64               0.69
+               40   2.6e-4          0.52               0.70
+               50   6.9e-5          0.44               0.72
+               60   1e-8            0.43               0.73
+              Validation stable autour de 0.731 sur les 6 dernières
+              epochs (taux presque nul).
+Lecture     : 1. Seuil franchi de justesse : +0.021 de frugalité pour un
+                 seuil de 0.02, sur une seule graine. Trois indices
+                 rendent le gain plus probable, sans remplacer les
+                 graines 2 et 3 : les 11 classes progressent (dont deux
+                 à peine, bread et seafood), la perte de validation
+                 baisse (0.858 à 0.826), et la validation reste autour
+                 de 0.731 sur les 6 dernières epochs (pas une dernière
+                 epoch chanceuse).
+              2. Le biais baisse nettement : train de 82.7 à 87.9 %.
+              3. La variance remonte : l'écart passe de 11.8 à 15.1
+                 points, au-dessus des 14.1 de l'essai 3. Le train gagne
+                 5.2 points, la validation seulement 1.9. L'écart
+                 devient le problème principal (15.1 points d'écart
+                 contre 12.1 % d'erreurs sur le train).
+              4. Réponse à l'espoir du "Pourquoi" : l'écart se creuse
+                 moins qu'à l'essai 3 (+3.3 points contre +7.2), mais
+                 surtout parce que le train gagne moins. La part du
+                 gain du train retrouvée en validation est la même
+                 (1.9 / 5.2 = 0.37 contre 3.8 / 11.0 = 0.35).
+              5. bread reste bloquée (F1 0.54, rappel 0.51, précision
+                 0.58 d'après la matrice de confusion recalculée depuis
+                 le réseau sauvegardé, même F1 macro 0.7214) : toujours
+                 confondue surtout avec egg (42 + 24 = 66 images, contre
+                 71 à l'essai 5D).
+Décision    : adopter 60 epochs. Nouvelles valeurs par défaut du script :
+              nbEpochs 60, nom "aug_5blocs_60ep". Gain à confirmer avec
+              les graines 2 et 3 sur la configuration finale. Prochain
+              seuil à battre : frugalité 0.693.
+
+
 PROCHAINS ESSAIS PRÉVUS
 =======================
 
-- Bilan après l'essai 7 : depuis l'essai 4, seul le 5e bloc a apporté un
-  gain au-dessus du seuil ; les autres leviers testés sans paramètre
-  ajouté (augmentation seule, taille des images, poids de classes) sont
-  restés dans le bruit. Diagnostic de l'essai 5D : environ 17 %
-  d'erreurs sur le train (biais) et 12 points d'écart avec la validation
-  (variance).
-- Essai 8, deux pistes à choisir :
-  A. 60 epochs au lieu de 40 (environ 47 min), contre le biais. Avec
-     l'augmentation, l'écart devrait moins se creuser qu'à l'essai 3.
-  B. Dropout avant la couche dense, contre l'écart train/validation.
+- Leviers qui ont marché depuis l'essai 4 : le 5e bloc (essai 5D), puis
+  60 epochs (essai 8). Restés dans le bruit : taille des images (essai
+  6), poids de classes (essai 7).
+- Essai 9 : dropout avant la couche dense, avec 60 epochs (aucun
+  paramètre ajouté). Il vise l'écart train/validation de 15.1 points,
+  devenu le problème principal ; le train à 88 % laisse de la marge s'il
+  baisse un peu. Seuil à battre : frugalité 0.693.
 - Configuration finale : graines 1, 2 et 3, moyenne et écart-type.

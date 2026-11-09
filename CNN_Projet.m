@@ -9,8 +9,8 @@ clc
 %% Réglages de l'essai
 % Pour un nouvel essai, on ne modifie que ce bloc. Chaque exécution ajoute
 % une ligne dans built/essais.csv avec ces réglages et les scores obtenus.
-% Valeurs par défaut : meilleur réglage à ce stade (essai 5D de suiviCNN.txt).
-cfg.nomEssai           = "aug_5blocs";
+% Valeurs par défaut : meilleur réglage à ce stade (essai 8 de suiviCNN.txt).
+cfg.nomEssai           = "aug_5blocs_60ep";
 cfg.graineDecoupage    = 42;      % ne jamais changer : même validation pour tout le groupe
 cfg.graineEntrainement = 1;       % 1 par défaut ; 2 et 3 pour mesurer la variabilité
 cfg.tailleImage        = [128 128];
@@ -25,7 +25,7 @@ cfg.calendrierTaux     = "cosine";
 cfg.augmentation       = true;    % true : retournements, translations et zooms aléatoires sur le train
 cfg.poidsClasses       = "aucun"; % "inverse" : les erreurs sur les petites classes comptent plus
 cfg.tailleLot          = 128;
-cfg.nbEpochs           = 40;      % environ 30 min sur le CPU du Mac
+cfg.nbEpochs           = 60;      % environ 45 min sur le CPU du Mac
 cfg.afficherCourbes    = true;    % false pour enchaîner des essais sans fenêtre graphique
 
 % Valeur inattendue : erreur tout de suite plutôt qu'à la fin du script
