@@ -846,19 +846,102 @@ Décision    : ne pas adopter. L'option reste dans le code avec 0 par
               comparables à celles de l'essai 8.
 
 
+----------------------------------------------------------------------
+ESSAI 10 : aug_forte_60ep (2026-11-09), augmentation plus forte
+----------------------------------------------------------------------
+Pourquoi    : l'essai 9 suggère que l'apprentissage par coeur se fait
+              dans les couches de convolution. L'augmentation agit sur
+              tout le réseau et avait divisé l'écart par deux à l'essai
+              4 ; on la renforce, sans paramètre ajouté. La piste L2 a
+              été écartée : dans MATLAB, avec adam, elle s'ajoute au
+              gradient (pas de "weight decay" découplé) et touche aussi
+              la batch norm, ce qui en rend l'effet incertain.
+Changement  : cfg.augmentation accepte maintenant "aucune", "base"
+              (l'augmentation des essais 4 à 9, toujours par défaut) et
+              "forte" = base + retournement vertical une fois sur deux
+              + rotation au hasard entre -30 et +30 degrés (coins
+              découverts remplis de la couleur moyenne du train). Ces
+              deux transformations avaient été écartées au départ ; un
+              coup d'oeil aux images montre que la plupart des photos
+              sont prises de dessus ou en plongée. Le plan parlait de
+              "petites rotations" et de variations de luminosité et de
+              couleur : on a finalement pris +/- 30 degrés et gardé
+              couleurs et luminosité intactes (indice clé, et l'outil
+              de MATLAB utilisé ne les fait pas). Seul changement par rapport à l'essai 8.
+              Critère fixé avant de lancer : frugalité supérieure à
+              0.693, avec un écart qui baisse parce que la validation
+              monte, pas seulement parce que le train baisse.
+Réglages    : 128x128, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation "forte", sans poids de
+              classes, sans dropout, lots de 128, 60 epochs, graine 1.
+              Code du commit 20a3ddb.
+Durée       : 47.0 min sur le CPU du Mac (42.2 min à l'essai 8 : les
+              rotations coûtent sans doute un peu de temps).
+Résultats   :                     essai 8     essai 10
+              augmentation        base        forte
+              exactitude train    87.9 %      80.2 %
+              validation          72.8 %      70.4 %
+              écart               15.1 pts     9.7 pts
+              perte validation    0.826       0.877
+              F1 macro            0.721       0.697
+              frugalité           0.673       0.649
+F1 par classe :
+              vegetable-fruit 0.86, soup 0.86, noodles-pasta 0.83, meat
+              0.74, seafood 0.74, egg 0.65, fried 0.65, rice 0.63,
+              dessert 0.61, dairy 0.57, bread 0.53
+              Par rapport à l'essai 8 : forte baisse pour rice (-0.10,
+              à peine au-delà de son bruit habituel qui va jusqu'à
+              0.09), baisse pour egg et fried (-0.05), meat (-0.04),
+              seafood (-0.03), dessert et vegetable-fruit (-0.02) ; les
+              autres classes bougent de 0.01 au plus, sauf
+              noodles-pasta, seule hausse nette (+0.06).
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.88               0.39
+               10   9.4e-4          1.19               0.48
+               20   7.7e-4          0.97               0.58
+               30   5.1e-4          0.83               0.66
+               40   2.6e-4          0.72               0.68
+               50   6.9e-5          0.66               0.70
+               60   1e-8            0.64               0.70
+              Validation stable autour de 0.705 sur les 6 dernières
+              epochs (taux presque nul). Pertes "Lots" mesurées sur des
+              images plus transformées, ce qui explique en partie
+              qu'elles soient plus hautes qu'à l'essai 8.
+Lecture     : 1. Recul au-delà du bruit : -0.025 de frugalité par
+                 rapport à la référence (essai 8). Premier recul au-delà
+                 du bruit depuis le début du réglage.
+              2. L'écart baisse fortement (15.1 à 9.7 points), mais pour
+                 la mauvaise raison : le train chute de 7.7 points et la
+                 validation baisse aussi (-2.4 points). Interprétation :
+                 le réseau n'arrive plus à apprendre aussi bien sur des
+                 images aussi transformées ; on échange de la variance
+                 contre du biais, avec un bilan négatif.
+              3. Hypothèse : le réseau reste limité par le biais
+                 (capacité ou durée d'entraînement). Les gains sont
+                 venus du calendrier cosine, d'entraînements plus longs
+                 et du 5e bloc ; élargir le dernier bloc (essai 5A),
+                 changer la taille des images (6), pondérer les classes
+                 (7), le dropout (9) et l'augmentation forte (10) n'ont
+                 rien apporté.
+Décision    : ne pas adopter. L'option "forte" reste dans le code ;
+              "base" reste la valeur par défaut et l'essai 8 le meilleur
+              réglage (0.673). Prochaine étape : confirmer l'essai 8
+              avec les graines 2 et 3.
+
+
 PROCHAINS ESSAIS PRÉVUS
 =======================
 
-- Leviers qui ont marché depuis l'essai 4 : le 5e bloc (essai 5D), puis
-  60 epochs (essai 8). Restés dans le bruit : taille des images (essai
-  6), poids de classes (essai 7), dropout avant la couche dense (essai
-  9).
-- Essai 10 : régularisation agissant sur les couches de convolution,
-  sans paramètre ajouté. Deux pistes : régularisation L2 plus forte
-  (0.0005 au lieu de 0.0001 par défaut dans MATLAB), ou augmentation de
-  données plus forte (petites rotations, variations de luminosité et de
-  couleur). Seuil à battre : frugalité 0.693. À savoir pour L2 dans
-  MATLAB : elle s'applique aussi aux paramètres de la batch norm, et avec
-  adam elle s'ajoute au gradient (pas de "weight decay" découplé), ce qui
-  peut en atténuer l'effet.
-- Configuration finale : graines 1, 2 et 3, moyenne et écart-type.
+- Bilan du réglage : ont amélioré le score le calendrier cosine (essai
+  2), les entraînements plus longs (essai 3, puis essai 8 de justesse) et
+  le 5e bloc (essai 5D). L'augmentation de base a divisé l'écart par deux
+  (essai 4) sans gain de score mesurable ; gardée depuis, elle n'a jamais
+  été testée seule avec le 5e bloc. Sans effet ou négatifs : dernier bloc
+  élargi (essai 5A), taille des images (essai 6), poids de classes
+  (essai 7), dropout 0.3 avant la couche dense (essai 9), augmentation
+  forte (essai 10).
+- En cours : graines 2 et 3 de l'essai 8, pour confirmer son gain (à la
+  limite du seuil) et donner moyenne et écart-type dans le rapport.
+- S'il reste du temps : un dernier essai contre le biais (réseau un peu
+  plus large, sachant qu'élargir le dernier bloc n'a rien donné à
+  l'essai 5A, ou 80 epochs).
