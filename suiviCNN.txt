@@ -1045,10 +1045,76 @@ des filtres. Variations de couleur et de luminosité écartées
 volontairement (voir l'essai 10).
 
 Étapes restantes :
-- soumission test sur le serveur (sans cocher le classement) pour
+- soumission d'essai sur le serveur (sans cocher le classement) pour
   vérifier le format et voir le score sur le test ;
 - comparaison avec les réseaux pré-entraînés de Nathan, sur le même
   découpage (graine 42) et avec evaluerReseau.m ;
 - rapport (démarche et chiffres repris de ce journal) ;
 - fusion de la branche cnn/conception-reglage dans main, puis
   soumission finale avant le 15 novembre.
+
+
+SOUMISSION D'ESSAI SUR LE SERVEUR (2026-11-09)
+----------------------------------------------
+Pourquoi    : vérifier le format du fichier et mesurer le score sur les
+              images de test, jamais utilisées pendant le réglage.
+Fichier     : built/predictions_aug_5blocs_60ep_graine2.json (essai 8,
+              graine 2), 3097 prédictions. Soumis sous le nom du groupe,
+              sans cocher la mise à jour du classement.
+Résultats   :              validation    validation       test
+                           (graine 2)   (moy. 3 graines)  (serveur)
+              F1 macro       0.740         0.731          0.714
+              frugalité      0.692         0.683          0.665
+              exactitude     74.1 %        73.6 %         76.2 %
+              Référence du tuteur (ResNet18 pré-entraîné, 11.6 millions
+              de paramètres) : F1 macro 0.819, frugalité 0.543.
+F1 par classe sur le test (entre parenthèses : moyenne des 3 graines en
+validation) :
+              vegetable-fruit 0.90 (0.88), soup 0.89 (0.86), rice 0.84
+              (0.76), noodles-pasta 0.82 (0.80), meat 0.80 (0.77), egg
+              0.77 (0.72), fried 0.73 (0.72), dessert 0.68 (0.65), bread
+              0.67 (0.57), dairy 0.55 (0.56), seafood 0.50 (0.75)
+Lecture     : 1. Format accepté. Le serveur applique bien la pénalité
+                 des 191 787 paramètres : 0.7137 - 0.0483 = 0.6654.
+              2. La frugalité de test est 0.027 sous la validation de la
+                 graine 2 et 0.018 sous la moyenne des 3 graines. Une
+                 partie de l'écart vient du choix de la meilleure graine
+                 en validation, dont le score était un peu optimiste ;
+                 l'essentiel vient de seafood, dont la baisse (0.50
+                 contre 0.75) retire à elle seule environ 0.02 au F1
+                 macro.
+              3. seafood chute : précision 0.35 pour un rappel de 0.85.
+                 Le fichier soumis prédit 128 images seafood, dont
+                 environ 45 justes ; avec ce rappel, le test n'en
+                 contiendrait qu'environ 53, soit 1.7 % des images,
+                 contre 9.0 % en validation (240 sur 2 659). Estimation
+                 tirée des chiffres du serveur et du fichier soumis,
+                 sans les étiquettes du test.
+                 Les fausses alarmes restent du même ordre : 83 images
+                 d'autres classes prédites seafood, soit 2.7 % de ces
+                 images, contre 2.4 % en validation (essai 5D, seule
+                 matrice de confusion détaillée). Face à seulement 45
+                 vraies seafood, elles font tomber la précision : la
+                 baisse viendrait de la répartition des classes du test
+                 plus que d'un réseau moins bon.
+                 L'exactitude plus haute sur le test (76.2 % contre
+                 74.1 %) malgré un F1 macro plus bas va dans le même
+                 sens : le test semble compter relativement plus
+                 d'images des classes bien reconnues.
+              4. bread (0.67) et rice (0.84) font mieux que la moyenne
+                 de validation ; pour rice, la graine 2 était déjà
+                 au-dessus de cette moyenne. dairy reste faible (0.55).
+              5. La précision et le rappel moyens affichés par le
+                 serveur sont pondérés par l'inverse de la fréquence des
+                 classes : ils ne se comparent pas à nos moyennes
+                 simples. Le F1 macro, la frugalité et l'exactitude se
+                 comparent (l'exactitude dépend toutefois de la
+                 répartition des classes).
+              6. Avec 60 fois moins de paramètres, le réseau dépasse la
+                 référence du tuteur de 0.12 en frugalité, malgré un F1
+                 macro plus faible (0.714 contre 0.819).
+Décision    : frugalité de test du CNN maison retenue pour le rapport :
+              0.665. Ce fichier reste notre candidat pour la soumission
+              finale (même nom de groupe, mise à jour du classement
+              cochée une seule fois) ; le choix final se fera après la
+              comparaison avec les réseaux pré-entraînés de Nathan.
