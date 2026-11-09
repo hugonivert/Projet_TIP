@@ -73,7 +73,7 @@ Contrôle rapide : 13 296 images dans `train`, 3 097 dans `test`.
 1. Ouvrez MATLAB.
 2. **Placez le dossier courant de MATLAB à la racine du dépôt** (`Projet_TIP/`). Les chemins dans le code sont relatifs (`"food-11/train"`), donc lancer le script depuis un autre dossier fait échouer `imageDatastore`.
 3. Lancez `prepareData.m` pour vérifier que les données sont bien trouvées (affiche 16 images au hasard).
-4. Lancez `CNN_Projet.m` pour le pipeline complet. Les prédictions du test sont écrites dans `built/predictions_<essai>_graine<n>.json` (le dossier `built/` est créé automatiquement), un fichier par essai. Par défaut, le script reproduit le meilleur réglage à ce stade (essai 8 de `suiviCNN.txt`, environ 45 min sur le CPU d'un Mac).
+4. Lancez `CNN_Projet.m` pour le pipeline complet. Les prédictions du test sont écrites dans `built/predictions_<essai>_graine<n>.json` (le dossier `built/` est créé automatiquement), un fichier par essai. Par défaut, le script reproduit le réseau retenu (essai 8 de `suiviCNN.txt`, graine 1 ; le fichier soumis vient de la graine 2), en environ 45 min sur le CPU d'un Mac.
 
 ### 1.5 Faire un essai
 
@@ -168,7 +168,7 @@ Décommenter seulement la ligne `ExecutionEnvironment` provoque une erreur de sy
 - [x] Gestion du déséquilibre des classes (rice : 376 images contre 2000 pour dessert et soup) : option `cfg.poidsClasses`, testée à l'essai 7, sans gain sur le score
 - [x] Graines aléatoires fixes (`rng`) : découpage train/validation et entraînement reproductibles
 - [x] Outils de réglage : réglages regroupés en tête de script, lecture des images accélérée, journal des essais (`built/essais.csv`) et historique par epoch (`built/historique_<essai>_graine<n>.csv`)
-- [ ] Réseau n°1 (CNN « maison ») : 5 blocs + global average pooling, 191 787 paramètres. Meilleur résultat à ce stade : frugalité 0,683 ± 0,010 sur la validation (moyenne sur 3 graines d'entraînement ; calendrier `cosine`, 60 epochs, augmentation de données). Réglage en cours, détail des essais dans `suiviCNN.txt`
+- [x] Réseau n°1 (CNN « maison ») : 5 blocs + global average pooling, 191 787 paramètres (essai 8, valeurs par défaut de `CNN_Projet.m`). Frugalité 0,683 ± 0,010 sur la validation (moyenne sur 3 graines d'entraînement ; calendrier `cosine`, 60 epochs, augmentation de données). Réglage arrêté ; prédictions à soumettre : `built/predictions_aug_5blocs_60ep_graine2.json` (graine 2, obtenue avec `cfg.graineEntrainement = 2`). Détail des essais et bilan dans `suiviCNN.txt`
 - [ ] Réseau n°2 (par ex. transfer learning sur un réseau pré-entraîné léger)
 - [x] Évaluation sur la validation : exactitude, F1 par classe, F1 macro, nombre de paramètres, frugalité, matrice de confusion (`evaluerReseau.m`)
 - [x] Génération du JSON de prédictions sur le test (`built/predictions_<essai>_graine<n>.json`) et sauvegarde du réseau entraîné (`built/reseau_<essai>_graine<n>.mat`)

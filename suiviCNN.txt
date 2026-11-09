@@ -992,18 +992,63 @@ Décision    : l'essai 8 est le réseau retenu à ce stade : 191 787
               (moyenne + 0.02), à juger sur plusieurs graines.
 
 
-PROCHAINS ESSAIS PRÉVUS
-=======================
+BILAN ET SUITE (2026-11-09)
+===========================
 
-- Bilan du réglage : ont amélioré le score le calendrier cosine (essai
-  2), les entraînements plus longs (essai 3, puis essai 8 de justesse) et
-  le 5e bloc (essai 5D). L'augmentation de base a divisé l'écart par deux
-  (essai 4) sans gain de score mesurable ; gardée depuis, elle n'a jamais
-  été testée seule avec le 5e bloc. Sans effet ou négatifs : dernier bloc
-  élargi (essai 5A), taille des images (essai 6), poids de classes
-  (essai 7), dropout 0.3 avant la couche dense (essai 9), augmentation
-  forte (essai 10).
-- Fait : graines 2 et 3 de l'essai 8, gain confirmé (0.683 +/- 0.010).
-- S'il reste du temps : un dernier essai contre le biais (réseau un peu
-  plus large, sachant qu'élargir le dernier bloc n'a rien donné à
-  l'essai 5A, ou 80 epochs).
+Réglage arrêté après l'essai 10 et la confirmation de l'essai 8 sur 3
+graines. Raisons : le gain de l'essai 8 est confirmé sur 3 graines, les
+derniers leviers testés (essais 9 et 10, une graine chacun) n'ont rien
+apporté, et il reste la comparaison avec les réseaux pré-entraînés, la
+soumission et le rapport avant le 15 novembre.
+
+Réseau retenu : essai 8 (aug_5blocs_60ep), valeurs par défaut de
+CNN_Projet.m (avec cfg.graineEntrainement = 2 pour le fichier soumis).
+5 blocs de convolution 16-32-64-96-128 + global average pooling + couche
+dense, 191 787 paramètres (pénalité 0.048), images 128x128, adam, taux de
+départ 0.001 avec calendrier cosine, augmentation "base", sans poids de
+classes ni dropout, lots de 128, 60 epochs. Frugalité de validation
+0.683 +/- 0.010 (3 graines). Fichier à soumettre (graine 2, la meilleure
+en validation : 0.692) :
+  built/predictions_aug_5blocs_60ep_graine2.json
+
+Résumé des essais (validation, graine 1 sauf mention) :
+  essai  nom                      paramètres  F1 macro  frugalité
+    0    tp_1couche (1 epoch)        349 523    0.215     0.137
+    1    base_4blocs                  99 339    0.514     0.487
+    2    cosine_20ep                  99 339    0.569     0.542
+         (graines 1 à 3 : frugalité 0.548 +/- 0.007)
+    3    cosine_40ep                  99 339    0.619     0.592
+    4    cosine_40ep_aug              99 339    0.623     0.596
+   5A    aug_192                     137 099    0.635     0.599
+   5D    aug_5blocs                  191 787    0.701     0.652
+    6    aug_5blocs_160              191 787    0.699     0.651
+    7    aug_5blocs_poids            191 787    0.699     0.651
+    8    aug_5blocs_60ep             191 787    0.721     0.673
+         (graines 1 à 3 : frugalité 0.683 +/- 0.010)
+    9    aug_5blocs_60ep_drop30      191 787    0.716     0.668
+   10    aug_forte_60ep              191 787    0.697     0.649
+
+Ce qui a amélioré le score : le calendrier cosine (essai 2), les
+entraînements plus longs (essai 3, puis essai 8, confirmé sur 3 graines)
+et le 5e bloc (essai 5D). L'augmentation de base a divisé l'écart
+train/validation par deux (essai 4) sans gain de score mesurable ; gardée
+depuis, elle n'a jamais été testée seule avec le 5e bloc. Sans effet ou
+négatifs : dernier bloc élargi (essai 5A), taille des images (essai 6),
+poids de classes (essai 7), dropout 0.3 avant la couche dense (essai 9),
+augmentation forte (essai 10).
+
+Limites connues : il reste du biais (12 % d'erreurs sur le train) et un
+écart d'environ 15 points avec la validation ; bread et dairy restent
+faibles (F1 de 0.56 à 0.57 en moyenne), bread surtout confondue avec
+egg. Pistes non testées faute de temps : 80 epochs, autre répartition
+des filtres. Variations de couleur et de luminosité écartées
+volontairement (voir l'essai 10).
+
+Étapes restantes :
+- soumission test sur le serveur (sans cocher le classement) pour
+  vérifier le format et voir le score sur le test ;
+- comparaison avec les réseaux pré-entraînés de Nathan, sur le même
+  découpage (graine 42) et avec evaluerReseau.m ;
+- rapport (démarche et chiffres repris de ce journal) ;
+- fusion de la branche cnn/conception-reglage dans main, puis
+  soumission finale avant le 15 novembre.
