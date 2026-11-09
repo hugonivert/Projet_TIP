@@ -867,7 +867,8 @@ Changement  : cfg.augmentation accepte maintenant "aucune", "base"
               "petites rotations" et de variations de luminosité et de
               couleur : on a finalement pris +/- 30 degrés et gardé
               couleurs et luminosité intactes (indice clé, et l'outil
-              de MATLAB utilisé ne les fait pas). Seul changement par rapport à l'essai 8.
+              de MATLAB utilisé ne les fait pas). Seul changement par
+              rapport à l'essai 8.
               Critère fixé avant de lancer : frugalité supérieure à
               0.693, avec un écart qui baisse parce que la validation
               monte, pas seulement parce que le train baisse.
