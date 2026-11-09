@@ -1,0 +1,1120 @@
+JOURNAL DE BORD DU CNN PERSONNEL (challenge Food-11)
+====================================================
+
+Ce fichier garde la trace de chaque essai et de la démarche suivie pour
+améliorer le CNN : pourquoi on fait l'essai, ce qui change, les résultats,
+ce qu'on en conclut et la décision prise ensuite. Il sert de base à la
+rédaction du rapport.
+
+Les chiffres bruts sont aussi dans built/essais.csv (une ligne par essai)
+et les courbes dans built/historique_<essai>_graine<n>.csv (une ligne par
+epoch). Chaque essai produit aussi ses prédictions du test
+(predictions_<essai>_graine<n>.json) et son réseau entraîné
+(reseau_<essai>_graine<n>.mat). Ces fichiers ne sont pas sur GitHub : les
+résultats importants sont donc recopiés ici.
+
+
+RÈGLES DE LA DÉMARCHE
+---------------------
+
+- Critère de classement : frugalité = F1 macro - 0.3 / (1 + 1/R), avec R
+  en millions de paramètres. On juge chaque essai sur la frugalité, pas
+  sur l'exactitude. Pénalité : 0.027 pour 100 000 paramètres, 0.05 pour
+  200 000, 0.10 pour 500 000, 0.15 pour 1 M, 0.23 pour 3.5 M.
+- Méthode du cours (diapo 28, "Experimental setup") :
+    1. bien faire sur le train (biais élevé : réseau plus grand, entraîner
+       plus longtemps ou mieux, recherche d'hyperparamètres, autre
+       architecture) ;
+    2. bien faire sur la validation (variance élevée : augmentation de
+       données, régularisation L2 ou dropout, recherche d'hyperparamètres,
+       autre architecture).
+  Adaptation au challenge : "réseau plus grand" coûte en frugalité, donc on
+  cherche de la capacité qui coûte peu de paramètres.
+- Un seul changement à la fois par rapport à l'essai de référence, pour
+  savoir ce qui a produit l'effet.
+- Graines : découpage train/validation toujours avec la graine 42 (même
+  validation pour tout le groupe). Graine d'entraînement 1 pour explorer ;
+  1, 2 et 3 pour mesurer le bruit et pour les réseaux finaux (moyenne et
+  écart-type).
+- On ne compare que des essais lancés sur la même machine (CPU du Mac
+  pour l'instant).
+- Seuil de décision (mesuré le 2026-11-08, voir "Mesure du bruit") : entre
+  deux essais lancés avec une seule graine, un écart de frugalité de plus
+  de 0.02 est très probablement réel. En dessous, relancer avec d'autres
+  graines avant de conclure.
+
+
+CHOIX DE CONCEPTION (avec leur justification)
+---------------------------------------------
+
+[2026-11-07] Lecture des images sans fonction de lecture personnalisée
+  augmentedImageDatastore redimensionne et convertit les images en niveaux
+  de gris en RGB (ColorPreprocessing="gray2rgb"). Lecture du train environ
+  9 fois plus rapide (4.6 s contre 42.2 s), une epoch du réseau du TP
+  environ 4 fois plus rapide (16 s contre 62 s). Indispensable sur un Mac
+  sans GPU.
+
+[2026-11-07] Évaluation commune : evaluerReseau.m
+  Exactitude, F1 par classe, F1 macro, nombre de paramètres, frugalité et
+  matrice de confusion, calculés de la même façon pour tous les réseaux du
+  groupe. Le F1 macro donne le même poids à chaque classe : il compte
+  autant pour rice (376 images de train) que pour soup (2000).
+
+[2026-11-08] Architecture de base : 4 blocs + global average pooling
+  Bloc du TP CIFAR-10 (convolution 3x3, batch norm, ReLU, max pooling 2x2)
+  répété 4 fois avec 16, 32, 64 puis 128 filtres, puis global average
+  pooling (GAP), couche dense de 11 sorties et softmax.
+  - Doubler les filtres en réduisant la taille : schéma classique du cours,
+    caractéristiques de plus en plus abstraites.
+  - GAP : dans le réseau du TP, la couche dense portait à elle seule
+    349 272 des 349 523 paramètres (reliée à toute la carte 63x63x8). Avec
+    le GAP, elle n'a plus que 128 x 11 poids + 11 biais. Total : 99 339
+    paramètres (pénalité 0.027), quelle que soit la taille des images.
+  - Padding "same" : chaque pooling divise exactement la taille par 2.
+
+[2026-11-08] Réglages d'entraînement de base
+  adam, taux d'apprentissage 0.001, lots de 128 (83 mises à jour par epoch
+  au lieu de 21 avec des lots de 500), 20 epochs.
+
+[2026-11-08] Réseau gardé : celui de la dernière epoch
+  Par défaut, trainnet renvoie le réseau de l'epoch où la perte de
+  validation est la plus basse. On impose OutputNetwork="last-iteration" :
+  sinon les scores de validation seraient optimistes (la validation
+  servirait aussi à choisir l'epoch) et l'exactitude train ne
+  correspondrait plus à la fin de l'entraînement, ce qui fausserait le
+  diagnostic biais/variance.
+
+[2026-11-08] Fichiers de sortie propres à chaque essai
+  Prédictions (predictions_<essai>_graine<n>.json), historique et réseau
+  entraîné (reseau_<essai>_graine<n>.mat, environ 380 Ko : réseau,
+  réglages, noms des classes, fichiers et vraies classes des images de
+  validation) portent le nom de l'essai et sa graine.
+  Plus rien n'est écrasé d'un essai à l'autre, et le réseau rechargé
+  redonne exactement les mêmes prédictions (vérifié sur les 3 097 images
+  du test) : pas besoin de réentraîner pour soumettre ou faire des
+  figures.
+
+
+ESSAIS
+======
+
+----------------------------------------------------------------------
+ESSAI 0 : tp_1couche (2026-11-07), réseau de référence du TP
+----------------------------------------------------------------------
+Pourquoi    : vérifier que toute la chaîne fonctionne (données, graines,
+              évaluation, export JSON, journal) et avoir un point de départ.
+Réseau      : réseau du TP CIFAR-10 à une couche (conv 3x3 de 8 filtres,
+              batch norm, ReLU, max pooling, couche dense), 349 523
+              paramètres.
+Réglages    : 128x128, sgdm, taux 0.001, lots de 500, 1 epoch, graine 1.
+Résultats   : exactitude train 28.0 %, validation 26.6 %
+              F1 macro 0.2145, frugalité 0.137
+              Graine 2 : F1 macro 0.1872 (même réglage).
+Lecture     : réseau beaucoup trop simple et presque tous ses paramètres
+              sont dans la couche dense. Les résultats sont identiques
+              d'une exécution à l'autre avec la même graine
+              (reproductibilité vérifiée).
+Décision    : concevoir un vrai CNN à plusieurs blocs avec GAP.
+
+----------------------------------------------------------------------
+ESSAI 1 : base_4blocs (2026-11-08), premier vrai CNN
+----------------------------------------------------------------------
+Pourquoi    : obtenir les premiers scores du CNN et faire le diagnostic
+              biais/variance qui oriente le réglage.
+Réseau      : 4 blocs 16-32-64-128 + GAP, 99 339 paramètres.
+Réglages    : 128x128, adam, taux 0.001 constant, lots de 128, 20 epochs,
+              graine 1. Code du commit 21271f5.
+Durée       : 12.4 min sur le CPU du Mac (environ 37 s par epoch).
+Résultats   : exactitude train finale 61.2 %, validation 53.3 %
+              F1 macro 0.514, frugalité 0.487
+              (essai 0 : frugalité 0.137 ; exemples du sujet : 0.57 avec
+              3.5 M de paramètres, 0.54 avec 11.6 M)
+F1 par classe :
+              soup 0.77, vegetable-fruit 0.69, meat 0.59, fried 0.55,
+              noodles-pasta 0.55, dessert 0.49, rice 0.48, egg 0.47,
+              seafood 0.41, bread 0.37, dairy 0.29
+Courbes     : epoch  perte train (lots)  exactitude validation
+                1          1.96               0.33
+                5          1.47               0.42
+                9          1.29               0.52
+               13          1.16               0.54
+               16          1.07               0.51
+               20          0.97               0.53
+Lecture     : 1. Biais : le réseau ne fait que 61 % sur son propre train
+                 et la perte train baisse encore à l'epoch 20, il n'a pas
+                 fini d'apprendre (sous-apprentissage).
+              2. Validation très instable d'une epoch à l'autre (0.42 à
+                 0.54, perte de validation de 1.37 à 1.83) : signe d'un
+                 taux d'apprentissage constant trop fort en fin
+                 d'entraînement. Le score final dépend de l'epoch où l'on
+                 s'arrête.
+              3. Variance encore secondaire : 8 points d'écart entre train
+                 et validation.
+              4. Classes faibles : dairy, bread, seafood.
+Décision    : ne pas mesurer tout de suite le bruit avec les graines 2 et 3
+              (on mesurerait surtout l'instabilité d'un réglage qu'on va
+              changer). Traiter d'abord le biais : calendrier de taux
+              d'apprentissage décroissant, puis entraînement plus long.
+
+----------------------------------------------------------------------
+ESSAI 2 : cosine_20ep (2026-11-08), taux d'apprentissage décroissant
+----------------------------------------------------------------------
+Pourquoi    : l'essai 1 montrait du biais et une validation instable en fin
+              d'entraînement. Hypothèse : un taux qui décroît stabilise la
+              fin d'entraînement et fait monter le train.
+Changement  : calendrier "cosine" (le taux passe en douceur de 0.001 à
+              0.001 x 1e-5 à la dernière epoch). Seul changement par
+              rapport à l'essai 1.
+Réglages    : 128x128, adam, taux de départ 0.001, cosine, lots de 128,
+              20 epochs, graine 1. Code du commit f3c0326.
+Durée       : 13.0 min sur le CPU du Mac (environ 39 s par epoch).
+Résultats   : exactitude train finale 66.8 % (essai 1 : 61.2 %)
+              validation 59.9 % (essai 1 : 53.3 %)
+              F1 macro 0.569, frugalité 0.542 (essai 1 : 0.487)
+F1 par classe :
+              vegetable-fruit 0.76, soup 0.74, meat 0.67, noodles-pasta
+              0.63, seafood 0.60, fried 0.56, dessert 0.55, egg 0.52,
+              bread 0.43, rice 0.43, dairy 0.36
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.96               0.33
+                5   8.9e-4          1.47               0.44
+               10   5.4e-4          1.24               0.51
+               15   1.6e-4          1.09               0.56
+               18   2.7e-5          1.05               0.60
+               20   1e-8            1.04               0.60
+Lecture     : 1. Hypothèse confirmée : la validation ne fait plus le yo-yo
+                 en fin d'entraînement, elle monte régulièrement de 0.590
+                 à 0.599 entre les epochs 16 et 20. Sur ces dernières
+                 epochs, le score ne dépend plus de l'epoch où l'on
+                 s'arrête (le calendrier cosine dépend toutefois du
+                 nombre d'epochs choisi : on compare des essais complets).
+                 Argument supplémentaire : la validation finale (0.599)
+                 dépasse la meilleure epoch de l'essai 1 (0.538, epoch 13).
+              2. +0.055 de frugalité en changeant une seule ligne.
+              3. Le biais reste le problème principal (train 67 %), écart
+                 train/validation d'environ 7 points.
+Décision    : garder "cosine" et entraîner plus longtemps (essai 3).
+
+----------------------------------------------------------------------
+ESSAI 3 : cosine_40ep (2026-11-08), entraînement deux fois plus long
+----------------------------------------------------------------------
+Pourquoi    : réduire encore le biais en entraînant plus longtemps (levier
+              "train longer" de la méthode du cours).
+Changement  : 40 epochs au lieu de 20 (le calendrier cosine s'étale sur
+              les 40 epochs). Seul changement par rapport à l'essai 2.
+Réglages    : 128x128, adam, taux de départ 0.001, cosine, lots de 128,
+              40 epochs, graine 1. Code du commit f3c0326.
+Durée       : 30.5 min sur le CPU du Mac (environ 46 s par epoch, contre
+              39 s à l'essai 2 pour le même réseau : le Mac a sans doute
+              été sollicité en parallèle).
+Résultats   : exactitude train finale 77.8 % (essai 2 : 66.8 %)
+              validation 63.7 % (essai 2 : 59.9 %)
+              F1 macro 0.619, frugalité 0.592 (essai 2 : 0.542)
+              Meilleur résultat à ce stade. Pour situer : les exemples
+              illustratifs du sujet donnent 0.57 (3.5 M de paramètres, F1
+              0.80) et 0.54 (11.6 M, F1 0.82). Ce sont des exemples
+              fictifs, et notre 0.592 est un score de validation, pas de
+              test.
+F1 par classe :
+              soup 0.79, vegetable-fruit 0.79, noodles-pasta 0.71, meat
+              0.68, seafood 0.64, fried 0.60, dessert 0.57, egg 0.57,
+              rice 0.52, bread 0.49, dairy 0.45
+              Toutes les classes progressent, surtout dairy et rice
+              (+0.09), deux des trois plus faibles, et noodles-pasta
+              (+0.08). bread, pourtant faible, ne gagne que +0.05 et meat
+              presque rien (+0.01).
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.96               0.33
+               10   8.7e-4          1.26               0.48
+               20   5.2e-4          0.95               0.56
+               25   3.2e-4          0.87               0.56
+               26   2.9e-4          0.85               0.61  (pic isolé)
+               27   2.5e-4          0.82               0.58
+               30   1.5e-4          0.79               0.61
+               35   4.0e-5          0.74               0.63
+               40   1e-8            0.73               0.64
+Lecture     : 1. Le biais a nettement baissé : train de 61 % (essai 1) à
+                 78 %.
+              2. La variance augmente plus vite que le biais ne baisse :
+                 en doublant les epochs (essai 2 vers essai 3), le train
+                 gagne 11.0 points (66.8 à 77.8 %) mais la validation
+                 seulement 3.8 points (59.9 à 63.7 %). L'écart
+                 train/validation double, de 6.9 à 14.1 points. Entraîner
+                 encore plus longtemps creuserait surtout l'écart, pour
+                 plus de 30 min par essai.
+              3. Le biais reste important : 22 % d'erreurs sur le train.
+                 La capacité (plus de filtres ou 5e bloc) reste donc une
+                 piste sérieuse.
+              4. Classes les plus faibles : dairy, bread, rice.
+              5. À cet essai, le script écrivait encore
+                 built/predictions.json (écrasé à chaque essai) : le
+                 fichier a été renommé à la main en
+                 predictions_cosine_40ep_graine1.json. Les
+                 prédictions des essais 1 et 2 sont perdues, et le réseau
+                 de l'essai 3 n'a pas été sauvegardé (sauvegarde ajoutée
+                 juste après). Relancer le script avec ses réglages par
+                 défaut le reproduit à l'identique sur le même Mac.
+Décision    : 1. Mesurer d'abord le bruit de notre réseau : graines 2 et
+                 3 sur le réglage de l'essai 2 (20 epochs, plus rapide).
+                 Notre seule mesure de bruit (écart de F1 de 0.027 entre
+                 deux graines) vient du réseau du TP après 1 epoch, pas
+                 représentative. Sans elle, on ne pourra pas dire si les
+                 prochains essais, aux gains attendus plus petits, font
+                 vraiment mieux.
+              2. Puis s'attaquer à l'écart train/validation avec
+                 l'augmentation de données (0 paramètre ajouté, donc pas
+                 de coût en frugalité).
+
+----------------------------------------------------------------------
+MESURE DU BRUIT : cosine_20ep, graines 2 et 3 (2026-11-08)
+----------------------------------------------------------------------
+Pourquoi    : savoir quelle part d'un résultat vient du hasard de
+              l'entraînement (poids de départ, ordre des images), pour
+              décider si un écart entre deux essais est réel. La seule
+              mesure précédente (essai 0, réseau du TP après 1 epoch)
+              n'était pas représentative.
+Changement  : aucun. Réglage de l'essai 2 relancé avec les graines
+              d'entraînement 2 et 3 (même validation, graine de
+              découpage 42).
+Réglages    : 128x128, adam, taux de départ 0.001, cosine, lots de 128,
+              20 epochs. Code du commit c0aadd7.
+Durée       : 11.8 min (graine 2) et 12.5 min (graine 3).
+Résultats   : graine  train   validation  F1 macro  frugalité
+                1     66.8 %    59.9 %     0.569     0.542
+                2     68.0 %    60.5 %     0.583     0.556
+                3     68.4 %    61.0 %     0.574     0.547
+              moyenne 67.7 %    60.5 %     0.575     0.548
+              écart-type         0.5 pt    0.007     0.007
+              Écart maximal entre deux graines : 0.014 de frugalité.
+F1 par classe (graines 1, 2, 3) :
+              dairy 0.36 / 0.36 / 0.27, rice 0.43 / 0.51 / 0.42 : les
+              deux plus petites classes varient de près de 0.09 d'une
+              graine à l'autre (115 et 75 images de validation, quelques
+              images suffisent à faire bouger leur F1). Les grandes
+              classes varient de moins de 0.03 (soup 0.74 / 0.73 / 0.75).
+Lecture     : 1. Bruit faible : environ 0.007 d'écart-type sur le F1 macro
+                 et la frugalité.
+              2. Seuil pratique de 0.02 entre deux essais à une graine
+                 (environ deux fois le bruit attendu sur une différence).
+                 3 graines ne donnent qu'une estimation grossière de
+                 l'écart-type, d'où un seuil prudent.
+              3. Les gains passés sont réels : essai 1 vers essai 2
+                 +0.055 ; essai 3 (0.592) contre la moyenne des 3 graines
+                 de l'essai 2 (0.548) : +0.044, environ 6 fois le bruit.
+              4. Le F1 macro donne autant de poids à dairy et rice
+                 qu'aux grandes classes : leur instabilité pèse sur le
+                 score. Argument pour essayer les poids de classes.
+              5. Limite : on ne mesure que le bruit de l'entraînement sur
+                 une validation fixe. Le score du test pourra s'écarter
+                 de la validation d'environ 0.01 à 0.02 (autres images).
+Décision    : appliquer le seuil de 0.02 aux prochains essais. Suite du
+              plan : augmentation de données (essai 4).
+
+
+----------------------------------------------------------------------
+ESSAI 4 : cosine_40ep_aug (2026-11-08), augmentation de données
+----------------------------------------------------------------------
+Pourquoi    : à l'essai 3, l'écart train/validation avait doublé (14
+              points) : le réseau commence à apprendre par coeur. Premier
+              outil du cours contre la variance, sans aucun paramètre
+              ajouté.
+Changement  : augmentation du train à chaque epoch : retournement
+              horizontal une fois sur deux, translation de +/- 40 pixels
+              de l'image d'origine, zoom entre 0.9 et 1.1, zones
+              découvertes remplies avec la couleur moyenne du train (sans
+              cela, 8 % des pixels devenaient noirs). Seul changement par
+              rapport à l'essai 3.
+Réglages    : 128x128, adam, taux de départ 0.001, cosine, augmentation,
+              lots de 128, 40 epochs, graine 1. Code du commit 85ffc88.
+Durée       : 27.5 min sur le CPU du Mac.
+Résultats   :                     essai 3     essai 4
+              exactitude train    77.8 %      71.3 %
+              validation          63.7 %      64.8 %
+              écart               14.1 pts     6.4 pts
+              perte validation    1.088       1.039
+              F1 macro            0.619       0.623
+              frugalité           0.592       0.596
+F1 par classe :
+              vegetable-fruit 0.84, soup 0.79, meat 0.70, noodles-pasta
+              0.69, seafood 0.68, fried 0.62, egg 0.59, dessert 0.57,
+              rice 0.48, bread 0.47, dairy 0.42
+              Hausse pour vegetable-fruit (+0.05), seafood (+0.04) et
+              meat (+0.03) ; baisse pour rice (-0.04) et dairy (-0.03),
+              dans leur bruit habituel (jusqu'à 0.09 d'une graine à
+              l'autre).
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.95               0.29
+               10   8.7e-4          1.31               0.43
+               20   5.2e-4          1.08               0.55
+               30   1.5e-4          0.95               0.63
+               35   4.0e-5          0.92               0.64
+               40   1e-8            0.91               0.65
+              Validation plate autour de 0.647 sur les 6 dernières
+              epochs (taux presque nul).
+Lecture     : 1. Hypothèse confirmée sur la variance : l'écart
+                 train/validation est divisé par deux (14.1 à 6.4 points)
+                 et la perte de validation baisse.
+              2. Gain de score minime : +0.004 de frugalité, sous le
+                 seuil de 0.02, donc non concluant. L'exactitude de
+                 validation gagne 1.1 point, mais le F1 macro bouge à
+                 peine (grandes classes en hausse, petites en légère
+                 baisse).
+              3. Le biais redevient le problème principal : train à 71 %
+                 seulement. Avec 99 339 paramètres, le réseau manque de
+                 capacité pour apprendre des images plus variées.
+Décision    : selon la règle du seuil, l'augmentation n'est pas adoptée
+              sur le seul score. Elle est toutefois gardée activée pour
+              les essais suivants : elle ne coûte aucun paramètre, elle a
+              nettement réduit l'écart, et elle permet d'augmenter la
+              capacité (prochain levier contre le biais) sans retomber
+              dans l'apprentissage par coeur. Le prochain essai la jugera.
+
+
+----------------------------------------------------------------------
+ESSAI 5 : aug_192 et aug_5blocs (2026-11-08), plus de capacité
+----------------------------------------------------------------------
+Pourquoi    : à l'essai 4, l'augmentation a réduit l'écart
+              train/validation (6.4 points) mais le train plafonne à
+              71 % : le biais redevient le problème principal. Levier du
+              cours contre le biais : un réseau plus grand. Comme chaque
+              paramètre coûte en frugalité, on compare deux façons
+              d'ajouter de la capacité pour un coût modéré (les deux
+              options n'ajoutent pas autant de paramètres : 37 760 pour
+              5A, 92 448 pour 5D).
+Changement  : seule l'architecture change par rapport à l'essai 4
+              (augmentation gardée) :
+              5A : plus large, dernier bloc à 192 filtres au lieu de 128
+                   (16-32-64-192), 137 099 paramètres, pénalité 0.036,
+                   environ 73 M de multiplications par image ;
+              5D : plus profond, 5e bloc (16-32-64-96-128), 191 787
+                   paramètres, pénalité 0.048, environ 66 M de
+                   multiplications par image.
+              Deux autres options ont été écartées avant de lancer : un
+              5e bloc à 128 filtres (247 179 paramètres, pénalité 0.059)
+              et tous les blocs élargis de moitié (221 579 paramètres,
+              environ 138 M de multiplications par image, deux fois plus
+              que 5A ou 5D).
+              Critère fixé avant de lancer : frugalité supérieure à 0.616
+              (essai 4 + seuil de 0.02), soit un F1 d'au moins 0.652 pour
+              5A et 0.665 pour 5D.
+Réglages    : 128x128, adam, taux de départ 0.001, cosine, augmentation,
+              lots de 128, 40 epochs, graine 1. Code du commit 9c346ae.
+Durée       : 29.6 min (5A) et 31.4 min (5D) sur le CPU du Mac.
+Résultats   :                     essai 4     5A          5D
+              paramètres          99 339      137 099     191 787
+              exactitude train    71.3 %      71.7 %      82.7 %
+              validation          64.8 %      65.4 %      70.9 %
+              écart               6.4 pts     6.3 pts     11.8 pts
+              perte validation    1.039       1.022       0.858
+              F1 macro            0.623       0.635       0.701
+              frugalité           0.596       0.599       0.652
+F1 par classe :
+              5A : vegetable-fruit 0.82, soup 0.79, meat 0.71,
+              noodles-pasta 0.71, seafood 0.66, egg 0.63, fried 0.62,
+              dessert 0.57, rice 0.56, bread 0.49, dairy 0.43
+              5D : vegetable-fruit 0.86, soup 0.85, seafood 0.76, meat
+              0.75, noodles-pasta 0.75, rice 0.69, fried 0.68, egg 0.67,
+              dessert 0.61, dairy 0.55, bread 0.54
+              5D progresse sur les 11 classes par rapport à l'essai 4,
+              surtout rice (+0.21, au-delà de son bruit habituel qui va
+              jusqu'à 0.09) et dairy (+0.13, probablement au-delà : ce
+              bruit a été mesuré sur un autre réglage), puis seafood et
+              egg (+0.08).
+              Les plus faibles restent bread et dairy.
+Courbes     : 5A   epoch  taux     perte train (lots)  exactitude val.
+                     1   1.0e-3        1.93               0.30
+                    10   8.7e-4        1.29               0.50
+                    20   5.2e-4        1.06               0.57
+                    30   1.5e-4        0.92               0.65
+                    35   4.0e-5        0.89               0.65
+                    40   1e-8          0.88               0.65
+              5D   epoch  taux     perte train (lots)  exactitude val.
+                     1   1.0e-3        1.86               0.33
+                    10   8.7e-4        1.10               0.50
+                    20   5.2e-4        0.81               0.62
+                    30   1.5e-4        0.63               0.68
+                    35   4.0e-5        0.59               0.71
+                    40   1e-8          0.58               0.71
+              Pour les deux, validation stable sur les dernières epochs
+              (taux presque nul).
+Lecture     : 1. 5A ne fait pas mieux : +0.003 de frugalité, dans le
+                 bruit, et le train ne monte pas (71.3 à 71.7 %).
+                 Élargir le dernier bloc à 192 filtres n'a pas réduit le
+                 biais ici.
+              2. 5D réduit nettement le biais : train de 71.3 à 82.7 %,
+                 perte train (lots) finale de 0.91 à 0.58. La validation
+                 gagne 6.1 points et la frugalité +0.056, presque trois
+                 fois le seuil de 0.02, malgré une pénalité plus forte
+                 (0.048 contre 0.027).
+              3. La variance remonte nettement : l'écart passe de 6.4 à
+                 11.8 points (presque x2), encore sous les 14.1 de
+                 l'essai 3 (sans augmentation). À surveiller aux
+                 prochains essais.
+              4. Hypothèse (non vérifiée) sur l'avantage de la
+                 profondeur : le 5e bloc ajoute une réduction de taille,
+                 chaque neurone final voit une plus grande zone de
+                 l'image, et le global average pooling moyenne une carte
+                 de 4x4 au lieu de 8x8. 5D fait pourtant moins de calculs
+                 que 5A. Mais 5D ajoute aussi 2.4 fois plus de paramètres
+                 que 5A : son gain peut venir simplement de là, et pas de
+                 la profondeur. La comparaison ne permet pas de trancher.
+              5. Une seule graine : le gain de 5D est large devant le
+                 bruit mesuré, mais il faudra le confirmer avec les
+                 graines 2 et 3 sur la configuration finale.
+Décision    : adopter 5D. Nouvelles valeurs par défaut du script :
+              filtres 16-32-64-96-128, augmentation activée, nom
+              "aug_5blocs". Prochain seuil à battre : frugalité 0.672.
+
+
+----------------------------------------------------------------------
+ESSAI 6 : aug_5blocs_160 (2026-11-08), images en 160x160
+----------------------------------------------------------------------
+Pourquoi    : à l'essai 5D, le train reste à 83 % : il reste du biais.
+              Hypothèse : des images plus grandes donnent plus de détails
+              au réseau. Grâce au global average pooling, la taille des
+              images ne change pas le nombre de paramètres : aucun coût
+              en frugalité, seulement en temps de calcul.
+Changement  : images d'entrée en 160x160 au lieu de 128x128 (sortie du
+              dernier bloc en 5x5 au lieu de 4x4). Seul changement par
+              rapport à l'essai 5D. L'augmentation n'est pas modifiée :
+              ses translations sont mesurées sur l'image d'origine.
+              Critère fixé avant de lancer : frugalité supérieure à 0.672
+              (essai 5D + seuil de 0.02).
+Réglages    : 160x160, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation, lots de 128, 40 epochs,
+              graine 1. Code du commit 21b0ce1.
+Durée       : 42.9 min sur le CPU du Mac, 1.37 fois l'essai 5D (1.56
+              attendu d'après le nombre de pixels).
+Résultats   :                     essai 5D    essai 6
+              taille des images   128x128     160x160
+              paramètres          191 787     191 787
+              exactitude train    82.7 %      81.5 %
+              validation          70.9 %      70.9 %
+              écart               11.8 pts    10.5 pts
+              perte validation    0.858       0.839
+              F1 macro            0.701       0.699
+              frugalité           0.652       0.651
+F1 par classe :
+              vegetable-fruit 0.89, soup 0.84, meat 0.75, noodles-pasta
+              0.75, seafood 0.73, fried 0.70, egg 0.68, rice 0.64,
+              dessert 0.61, dairy 0.56, bread 0.56
+              Par rapport à 5D : baisse pour rice (-0.05) et seafood
+              (-0.03), hausse pour vegetable-fruit (+0.03) ; les autres
+              classes bougent de 0.02 au plus. rice reste dans son bruit
+              habituel (jusqu'à 0.09) ; seafood et vegetable-fruit sont à
+              la limite du bruit des grandes classes (moins de 0.03).
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.86               0.38
+               10   8.7e-4          1.13               0.51
+               20   5.2e-4          0.84               0.63
+               30   1.5e-4          0.66               0.69
+               35   4.0e-5          0.62               0.71
+               40   1e-8            0.61               0.71
+              Validation stable autour de 0.708 sur les 6 dernières
+              epochs (taux presque nul).
+Lecture     : 1. Aucun effet : -0.002 de frugalité, dans le bruit, et
+                 0.021 sous le seuil de 0.672. La validation est identique
+                 (70.93 % contre 70.89 %).
+              2. Le biais ne baisse pas : le train recule même un peu
+                 (81.5 % contre 82.7 %, perte train (lots) 0.61 contre
+                 0.58), dans le bruit (le train variait de 1.6 point
+                 entre graines). L'hypothèse "plus de détails, moins de
+                 biais" n'est pas confirmée.
+              3. Hypothèse (non vérifiée) : les filtres couvrent la même
+                 zone en pixels ; sur une image plus grande, chaque
+                 neurone voit donc une part plus petite du plat, ce qui
+                 peut annuler le gain de détails.
+              4. L'écart train/validation baisse un peu (10.5 contre
+                 11.8 points), mais parce que le train baisse, pas parce
+                 que la validation monte. Probablement du bruit aussi.
+Décision    : ne pas adopter. On garde 128x128, qui donne le même score
+              en environ 27 % de temps en moins (31.4 contre 42.9 min).
+              Le seuil à battre reste 0.672.
+
+
+----------------------------------------------------------------------
+ANALYSE : matrice de confusion de l'essai 5D (2026-11-08)
+----------------------------------------------------------------------
+Pourquoi    : préparer l'essai 7 (poids de classes). Savoir si les
+              classes faibles le sont parce que le réseau les choisit
+              trop rarement (petites classes) ou parce qu'elles
+              ressemblent à d'autres plats.
+Méthode     : réseau de l'essai 5D rechargé depuis
+              built/reseau_aug_5blocs_graine1.mat, sans réentraîner,
+              puis prédictions sur la validation (2 659 images). On
+              retrouve exactement le même F1 macro (0.7006).
+              Rappel : part des vraies images de la classe bien
+              reconnues. Précision : part des prédictions de la classe
+              qui sont justes.
+Résultats   : classe            images val  rappel  précision  F1
+              bread                 271      0.52     0.56     0.54
+              dairy                 115      0.49     0.63     0.55
+              dessert               400      0.60     0.62     0.61
+              egg                   263      0.72     0.62     0.67
+              fried                 235      0.66     0.70     0.68
+              meat                  355      0.78     0.72     0.75
+              noodles-pasta         117      0.77     0.73     0.75
+              rice                   75      0.64     0.75     0.69
+              seafood               240      0.75     0.76     0.76
+              soup                  400      0.87     0.84     0.85
+              vegetable-fruit       188      0.87     0.86     0.86
+Confusions principales :
+              bread : 131 images manquées, classées surtout egg (44),
+              dessert (22), meat (20) et fried (18). Prédites bread à
+              tort : 108, surtout egg (27), fried (25) et dessert (20).
+              dairy : 59 images manquées, dont 24 classées dessert.
+              Prédites dairy à tort : 33, dont 17 dessert.
+              rice : 27 images manquées, surtout noodles-pasta (9) et
+              bread (8). Prédites rice à tort : 16.
+              dessert : 159 images manquées, dispersées (meat 31, soup
+              25, egg 22). Prédites dessert à tort : 146, surtout dairy
+              (24), soup (23), bread et meat (22 chacune).
+Lecture     : 1. dairy et rice sont sous-prédites : dairy est prédite 89
+                 fois pour 115 vraies images, rice 64 fois pour 75
+                 (rappel 0.49 et 0.64, sous leur précision 0.63 et
+                 0.75). C'est compatible avec un effet de taille, le cas
+                 que visent les poids de classes : ils devraient faire
+                 monter leur rappel, au prix d'un peu de précision. Mais
+                 une partie de leurs erreurs relève aussi de la
+                 ressemblance : 24 dairy classées dessert, 9 rice
+                 classées noodles-pasta. noodles-pasta, presque aussi
+                 petite que dairy, n'est d'ailleurs pas sous-prédite (124
+                 prédictions pour 117 vraies images).
+              2. bread a un autre problème : rappel (0.52) et précision
+                 (0.56) faibles tous les deux, erreurs dans les deux
+                 sens, surtout avec egg (44 + 27 = 71 images). Cela va
+                 dans le sens de l'hypothèse notée dans le plan des
+                 prochains essais : la faiblesse de bread ne vient pas
+                 du nombre d'images. bread est un peu sous-prédite (248
+                 prédictions pour 271) mais son poids resterait proche
+                 de la moyenne : peu d'effet attendu des poids de
+                 classes. Hypothèse (non vérifiée, il faudrait regarder
+                 les images) : des assiettes qui mêlent pain et oeufs,
+                 comme les petits-déjeuners.
+              3. dessert reçoit beaucoup d'images des autres classes (146
+                 faux positifs) sans être sur-prédite (387 prédictions
+                 pour 400) : c'est un effet de ressemblance plutôt que
+                 de taille, puisque soup, de même taille, n'a que 68
+                 faux positifs. Hypothèse : les poids de classes, en
+                 réduisant le poids de dessert, pourraient diminuer les
+                 erreurs dairy classées dessert.
+              4. Une seule graine et 75 à 400 images de validation par
+                 classe : pour rice et dairy, quelques images suffisent à
+                 faire bouger ces chiffres.
+Décision    : essai 7 = poids de classes. Gain attendu modeste : si dairy
+              et rice gagnaient chacune 0.05 de F1, le F1 macro ne
+              monterait que d'environ 0.009 (0.10 / 11). Le poids de
+              classes n'ajoutant aucun paramètre, le gain de frugalité
+              serait le même : probablement sous le seuil de 0.02.
+
+
+----------------------------------------------------------------------
+ESSAI 7 : aug_5blocs_poids (2026-11-08), poids de classes
+----------------------------------------------------------------------
+Pourquoi    : la matrice de confusion de l'essai 5D montre dairy et rice
+              sous-prédites (89 prédictions pour 115 vraies images, 64
+              pour 75). Le F1 macro donne autant de poids à chaque
+              classe : faire monter leur rappel devrait aider le score,
+              sans ajouter de paramètre.
+Changement  : nouvelle option cfg.poidsClasses = "inverse" : dans la
+              perte, chaque classe reçoit le poids nombre d'images du
+              train / (11 x images de la classe), calculé sur le train
+              seulement. Poids obtenus : rice 3.21, dairy 2.11,
+              noodles-pasta 2.06, vegetable-fruit 1.28, fried 1.03,
+              seafood 1.01, egg 0.92, bread 0.89, meat 0.68, dessert et
+              soup 0.60. Le poids moyen sur les images du train vaut 1.
+              Seul changement par rapport à l'essai 5D.
+              Critère fixé avant de lancer : frugalité supérieure à 0.672.
+              Gain attendu modeste (voir l'analyse de la matrice de
+              confusion).
+Réglages    : 128x128, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation, poids de classes "inverse",
+              lots de 128, 40 epochs, graine 1. Code du commit 9db2a27.
+Durée       : 34.0 min sur le CPU du Mac (31.4 min pour l'essai 5D).
+Résultats   :                     essai 5D    essai 7
+              exactitude train    82.7 %      80.2 %
+              validation          70.9 %      70.4 %
+              écart               11.8 pts     9.9 pts
+              F1 macro            0.701       0.699
+              frugalité           0.652       0.651
+              Perte de validation (0.856) non comparable : elle est
+              pondérée par les poids de classes.
+F1 par classe :
+              vegetable-fruit 0.85, soup 0.85, noodles-pasta 0.76, meat
+              0.75, seafood 0.74, rice 0.68, egg 0.67, fried 0.66,
+              dessert 0.59, dairy 0.57, bread 0.57
+              Par rapport à 5D : hausse pour bread (+0.03), dairy (+0.02)
+              et noodles-pasta (+0.01) ; baisse pour dessert (-0.03),
+              seafood (-0.02) et fried (-0.02) ; rice ne bouge presque
+              pas (-0.01).
+Matrice de confusion (recalculée depuis le réseau sauvegardé, même F1
+macro 0.6990) :
+              classe     rappel 5D/7   précision 5D/7   prédictions 5D/7
+              dairy      0.49 / 0.68    0.63 / 0.50      89 / 157 (115)
+              rice       0.64 / 0.75    0.75 / 0.63      64 /  89  (75)
+              noodles-p. 0.77 / 0.82    0.73 / 0.71     124 / 136 (117)
+              dessert    0.60 / 0.53    0.62 / 0.66     387 / 323 (400)
+              bread      0.52 / 0.55    0.56 / 0.60     248 / 248 (271)
+              (entre parenthèses : nombre de vraies images de
+              validation)
+              dairy classées dessert : 24 à l'essai 5D, 6 ici ; dessert
+              classées dairy : 17 à l'essai 5D, 38 ici.
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.92               0.36
+               10   8.7e-4          1.11               0.52
+               20   5.2e-4          0.81               0.61
+               30   1.5e-4          0.62               0.67
+               35   4.0e-5          0.59               0.70
+               40   1e-8            0.57               0.70
+              Pertes pondérées, non comparables aux essais précédents.
+              Validation stable autour de 0.704 sur les 6 dernières
+              epochs (taux presque nul).
+Lecture     : 1. Le mécanisme fonctionne : le rappel de dairy passe de
+                 0.49 à 0.68 et celui de rice de 0.64 à 0.75.
+              2. Mais la correction va trop loin : dairy et rice sont
+                 maintenant sur-prédites (157 prédictions pour 115
+                 vraies images, 89 pour 75) et leur précision baisse
+                 (0.63 à 0.50 ; 0.75 à 0.63). Le F1 de rice ne bouge
+                 presque pas, celui de dairy gagne seulement 0.02.
+              3. Les erreurs changent surtout de sens : moins de dairy
+                 classées dessert (24 à 6), mais plus de dessert classées
+                 dairy (17 à 38). dessert perd ce que dairy gagne.
+              4. Le train baisse (80.2 % contre 82.7 %), probablement
+                 parce que le réseau donne moins d'importance aux grandes
+                 classes (une seule graine). L'écart train/validation
+                 baisse parce que le train baisse, pas parce que la
+                 validation monte.
+              5. bread gagne 0.03 de F1, à la limite du bruit ; elle
+                 reste confondue surtout avec egg (39 + 27 = 66 images).
+              6. Au total, frugalité -0.002 : dans le bruit, aucun gain.
+Décision    : ne pas adopter. L'option reste dans le code avec "aucun"
+              par défaut. Des poids plus doux (racine carrée de
+              l'inverse) trouveraient peut-être un équilibre, mais le
+              gain possible semble faible (environ 0.01 d'après
+              l'estimation de l'analyse de l'essai 5D, sous le seuil).
+
+
+----------------------------------------------------------------------
+ESSAI 8 : aug_5blocs_60ep (2026-11-08), 60 epochs au lieu de 40
+----------------------------------------------------------------------
+Pourquoi    : le biais reste le plus gros problème de l'essai 5D
+              (environ 17 % d'erreurs sur le train). Levier "entraîner
+              plus longtemps" du cours, sans paramètre ajouté. À
+              l'essai 3 (sans augmentation), doubler les epochs avait
+              surtout creusé l'écart ; avec l'augmentation, on espère
+              qu'il se creuse moins.
+Changement  : 60 epochs au lieu de 40 (le calendrier cosine s'étale sur
+              les 60 epochs). Seul changement par rapport à l'essai 5D.
+              Critère fixé avant de lancer : frugalité supérieure à 0.672.
+Réglages    : 128x128, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation, sans poids de classes, lots
+              de 128, 60 epochs, graine 1. Code du commit 3ac0bdf.
+Durée       : 42.2 min sur le CPU du Mac (environ 42 s par epoch, contre
+              47 s à l'essai 5D : le Mac était sans doute moins
+              sollicité).
+Résultats   :                     essai 5D    essai 8
+              epochs              40          60
+              exactitude train    82.7 %      87.9 %
+              validation          70.9 %      72.8 %
+              écart               11.8 pts    15.1 pts
+              perte validation    0.858       0.826
+              F1 macro            0.701       0.721
+              frugalité           0.652       0.673
+F1 par classe :
+              vegetable-fruit 0.88, soup 0.87, meat 0.78, seafood 0.77,
+              noodles-pasta 0.76, rice 0.73, egg 0.70, fried 0.69,
+              dessert 0.64, dairy 0.58, bread 0.54
+              Les 11 classes progressent par rapport à 5D : rice
+              (+0.04), egg, meat, dairy et dessert (+0.03), fried,
+              noodles-pasta, soup et vegetable-fruit (+0.02), seafood
+              (+0.01). bread ne gagne presque rien (+0.005).
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.86               0.33
+               10   9.4e-4          1.11               0.50
+               20   7.7e-4          0.83               0.59
+               30   5.1e-4          0.64               0.69
+               40   2.6e-4          0.52               0.70
+               50   6.9e-5          0.44               0.72
+               60   1e-8            0.43               0.73
+              Validation stable autour de 0.731 sur les 6 dernières
+              epochs (taux presque nul).
+Lecture     : 1. Seuil franchi de justesse : +0.021 de frugalité pour un
+                 seuil de 0.02, sur une seule graine. Trois indices
+                 rendent le gain plus probable, sans remplacer les
+                 graines 2 et 3 : les 11 classes progressent (dont deux
+                 à peine, bread et seafood), la perte de validation
+                 baisse (0.858 à 0.826), et la validation reste autour
+                 de 0.731 sur les 6 dernières epochs (pas une dernière
+                 epoch chanceuse).
+              2. Le biais baisse nettement : train de 82.7 à 87.9 %.
+              3. La variance remonte : l'écart passe de 11.8 à 15.1
+                 points, au-dessus des 14.1 de l'essai 3. Le train gagne
+                 5.2 points, la validation seulement 1.9. L'écart
+                 devient le problème principal (15.1 points d'écart
+                 contre 12.1 % d'erreurs sur le train).
+              4. Réponse à l'espoir du "Pourquoi" : l'écart se creuse
+                 moins qu'à l'essai 3 (+3.3 points contre +7.2), mais
+                 surtout parce que le train gagne moins. La part du
+                 gain du train retrouvée en validation est la même
+                 (1.9 / 5.2 = 0.37 contre 3.8 / 11.0 = 0.35).
+              5. bread reste bloquée (F1 0.54, rappel 0.51, précision
+                 0.58 d'après la matrice de confusion recalculée depuis
+                 le réseau sauvegardé, même F1 macro 0.7214) : toujours
+                 confondue surtout avec egg (42 + 24 = 66 images, contre
+                 71 à l'essai 5D).
+Décision    : adopter 60 epochs. Nouvelles valeurs par défaut du script :
+              nbEpochs 60, nom "aug_5blocs_60ep". Gain à confirmer avec
+              les graines 2 et 3 sur la configuration finale. Prochain
+              seuil à battre : frugalité 0.693.
+
+
+----------------------------------------------------------------------
+ESSAI 9 : aug_5blocs_60ep_drop30 (2026-11-09), dropout
+----------------------------------------------------------------------
+Pourquoi    : à l'essai 8, l'écart train/validation (15.1 points) est
+              devenu le problème principal. Le dropout est l'un des deux
+              outils de régularisation cités par le cours contre la
+              variance, et il n'ajoute aucun paramètre.
+Changement  : nouvelle option cfg.dropout. Avec 0.3, une couche de
+              dropout est placée entre le global average pooling et la
+              couche dense : pendant l'entraînement, chacune des 128
+              valeurs est mise à zéro avec la probabilité 0.3 (les
+              autres sont multipliées par 1/0.7). Rien n'est effacé sur
+              la validation et le test. Avec 0, le réseau est
+              exactement celui de l'essai 8. Valeur modérée (0.3 plutôt
+              que la valeur classique 0.5) parce qu'il reste du biais
+              (12 % d'erreurs sur le train). Seul changement par rapport
+              à l'essai 8. Reproductibilité vérifiée : deux tests courts
+              avec la même graine donnent exactement les mêmes scores.
+              Critère fixé avant de lancer : frugalité supérieure à
+              0.693, avec un écart qui baisse parce que la validation
+              monte, pas seulement parce que le train baisse.
+Réglages    : 128x128, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation, sans poids de classes,
+              dropout 0.3, lots de 128, 60 epochs, graine 1. Code du
+              commit b4da2e6.
+Durée       : 42.1 min sur le CPU du Mac.
+Résultats   :                     essai 8     essai 9
+              dropout             0           0.3
+              exactitude train    87.9 %      88.2 %
+              validation          72.8 %      72.1 %
+              écart               15.1 pts    16.1 pts
+              perte validation    0.826       0.822
+              F1 macro            0.721       0.716
+              frugalité           0.673       0.668
+F1 par classe :
+              vegetable-fruit 0.88, soup 0.87, noodles-pasta 0.80, meat
+              0.75, seafood 0.72, rice 0.71, egg 0.70, fried 0.69,
+              dessert 0.64, dairy 0.58, bread 0.54
+              Par rapport à l'essai 8 : hausse pour noodles-pasta
+              (+0.03) ; baisse pour seafood (-0.04), meat (-0.03) et
+              rice (-0.02) ; les autres classes bougent de 0.01 au plus.
+              Ces écarts restent à la limite du bruit d'une seule
+              graine.
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.87               0.36
+               10   9.4e-4          1.09               0.55
+               20   7.7e-4          0.82               0.57
+               30   5.1e-4          0.64               0.64
+               40   2.6e-4          0.52               0.68
+               50   6.9e-5          0.45               0.72
+               60   1e-8            0.43               0.72
+              Validation stable autour de 0.721 sur les 6 dernières
+              epochs (taux presque nul).
+Lecture     : 1. Aucun effet : -0.006 de frugalité, dans le bruit, loin
+                 du seuil de 0.693. L'écart ne baisse pas (16.1 contre
+                 15.1 points) et la perte de validation est quasi
+                 identique (0.822 contre 0.826).
+              2. Le dropout ne freine même pas le train (88.2 % contre
+                 87.9 %), ce qui suggère qu'il a peu à régulariser là où
+                 il agit.
+              3. Hypothèse (très probable, non vérifiée) : la couche
+                 dense qui suit le dropout n'a que 1 419 paramètres
+                 (128 x 11 poids + 11 biais), 0.7 % des 191 787 du
+                 réseau. L'apprentissage par coeur se fait donc presque
+                 entièrement dans les couches de convolution, sur
+                 lesquelles ce dropout n'agit qu'indirectement. Avec le
+                 global average pooling, la tête du réseau est déjà
+                 minuscule : un dropout de 0.3 à cet endroit sert peu
+                 (0.5 n'a pas été testé).
+Décision    : ne pas adopter. L'option reste dans le code avec 0 par
+              défaut ; l'essai 8 reste le meilleur réglage (0.673). La
+              piste suivante pour réduire l'écart est d'agir sur les
+              couches de convolution.
+              Note : les pertes et exactitudes "Lots" de cet essai sont
+              mesurées avec le dropout actif, donc pas strictement
+              comparables à celles de l'essai 8.
+
+
+----------------------------------------------------------------------
+ESSAI 10 : aug_forte_60ep (2026-11-09), augmentation plus forte
+----------------------------------------------------------------------
+Pourquoi    : l'essai 9 suggère que l'apprentissage par coeur se fait
+              dans les couches de convolution. L'augmentation agit sur
+              tout le réseau et avait divisé l'écart par deux à l'essai
+              4 ; on la renforce, sans paramètre ajouté. La piste L2 a
+              été écartée : dans MATLAB, avec adam, elle s'ajoute au
+              gradient (pas de "weight decay" découplé) et touche aussi
+              la batch norm, ce qui en rend l'effet incertain.
+Changement  : cfg.augmentation accepte maintenant "aucune", "base"
+              (l'augmentation des essais 4 à 9, toujours par défaut) et
+              "forte" = base + retournement vertical une fois sur deux
+              + rotation au hasard entre -30 et +30 degrés (coins
+              découverts remplis de la couleur moyenne du train). Ces
+              deux transformations avaient été écartées au départ ; un
+              coup d'oeil aux images montre que la plupart des photos
+              sont prises de dessus ou en plongée. Le plan parlait de
+              "petites rotations" et de variations de luminosité et de
+              couleur : on a finalement pris +/- 30 degrés et gardé
+              couleurs et luminosité intactes (indice clé, et l'outil
+              de MATLAB utilisé ne les fait pas). Seul changement par
+              rapport à l'essai 8.
+              Critère fixé avant de lancer : frugalité supérieure à
+              0.693, avec un écart qui baisse parce que la validation
+              monte, pas seulement parce que le train baisse.
+Réglages    : 128x128, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation "forte", sans poids de
+              classes, sans dropout, lots de 128, 60 epochs, graine 1.
+              Code du commit 20a3ddb.
+Durée       : 47.0 min sur le CPU du Mac (42.2 min à l'essai 8 : les
+              rotations coûtent sans doute un peu de temps).
+Résultats   :                     essai 8     essai 10
+              augmentation        base        forte
+              exactitude train    87.9 %      80.2 %
+              validation          72.8 %      70.4 %
+              écart               15.1 pts     9.7 pts
+              perte validation    0.826       0.877
+              F1 macro            0.721       0.697
+              frugalité           0.673       0.649
+F1 par classe :
+              vegetable-fruit 0.86, soup 0.86, noodles-pasta 0.83, meat
+              0.74, seafood 0.74, egg 0.65, fried 0.65, rice 0.63,
+              dessert 0.61, dairy 0.57, bread 0.53
+              Par rapport à l'essai 8 : forte baisse pour rice (-0.10,
+              à peine au-delà de son bruit habituel qui va jusqu'à
+              0.09), baisse pour egg et fried (-0.05), meat (-0.04),
+              seafood (-0.03), dessert et vegetable-fruit (-0.02) ; les
+              autres classes bougent de 0.01 au plus, sauf
+              noodles-pasta, seule hausse nette (+0.06).
+Courbes     : epoch  taux       perte train (lots)  exactitude validation
+                1   1.0e-3          1.88               0.39
+               10   9.4e-4          1.19               0.48
+               20   7.7e-4          0.97               0.58
+               30   5.1e-4          0.83               0.66
+               40   2.6e-4          0.72               0.68
+               50   6.9e-5          0.66               0.70
+               60   1e-8            0.64               0.70
+              Validation stable autour de 0.705 sur les 6 dernières
+              epochs (taux presque nul). Pertes "Lots" mesurées sur des
+              images plus transformées, ce qui explique en partie
+              qu'elles soient plus hautes qu'à l'essai 8.
+Lecture     : 1. Recul au-delà du bruit : -0.025 de frugalité par
+                 rapport à la référence (essai 8). Premier recul au-delà
+                 du bruit depuis le début du réglage.
+              2. L'écart baisse fortement (15.1 à 9.7 points), mais pour
+                 la mauvaise raison : le train chute de 7.7 points et la
+                 validation baisse aussi (-2.4 points). Interprétation :
+                 le réseau n'arrive plus à apprendre aussi bien sur des
+                 images aussi transformées ; on échange de la variance
+                 contre du biais, avec un bilan négatif.
+              3. Hypothèse : le réseau reste limité par le biais
+                 (capacité ou durée d'entraînement). Les gains sont
+                 venus du calendrier cosine, d'entraînements plus longs
+                 et du 5e bloc ; élargir le dernier bloc (essai 5A),
+                 changer la taille des images (6), pondérer les classes
+                 (7), le dropout (9) et l'augmentation forte (10) n'ont
+                 rien apporté.
+Décision    : ne pas adopter. L'option "forte" reste dans le code ;
+              "base" reste la valeur par défaut et l'essai 8 le meilleur
+              réglage (0.673). Prochaine étape : confirmer l'essai 8
+              avec les graines 2 et 3.
+
+
+----------------------------------------------------------------------
+CONFIRMATION DE L'ESSAI 8 : aug_5blocs_60ep, graines 2 et 3 (2026-11-09)
+----------------------------------------------------------------------
+Pourquoi    : le gain de l'essai 8 (+0.021) était à la limite du seuil
+              de 0.02, sur une seule graine. Il faut le confirmer avant
+              d'en faire le réseau final, et le rapport a besoin d'une
+              moyenne et d'un écart-type.
+Changement  : aucun. Réglage de l'essai 8 (valeurs par défaut du
+              script) relancé avec les graines d'entraînement 2 et 3
+              (même validation, graine de découpage 42).
+Réglages    : 128x128, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation "base", sans poids de classes,
+              sans dropout, lots de 128, 60 epochs. Code du commit
+              20a3ddb (même réseau et mêmes réglages que l'essai 8).
+Durée       : 45.9 min (graine 2) et 48.0 min (graine 3).
+Résultats   : graine  train   validation  écart   F1 macro  frugalité
+                1     87.9 %    72.8 %    15.1     0.721     0.673
+                2     88.6 %    74.1 %    14.4     0.740     0.692
+                3     88.2 %    73.7 %    14.4     0.732     0.683
+              moyenne 88.2 %    73.6 %    14.7     0.731     0.683
+              écart-type
+                      0.3 pt    0.7 pt     0.4     0.010     0.010
+              Écart maximal entre deux graines : 0.019 de frugalité.
+F1 par classe (moyenne des 3 graines, mini à maxi) :
+              vegetable-fruit 0.88 (0.87 à 0.89), soup 0.86 (0.85 à
+              0.87), noodles-pasta 0.80 (0.76 à 0.86), meat 0.77 (0.76
+              à 0.78), rice 0.76 (0.73 à 0.80), seafood 0.75 (0.74 à
+              0.77), egg 0.72 (0.70 à 0.74), fried 0.72 (0.69 à 0.74),
+              dessert 0.65 (0.64 à 0.66), bread 0.57 (0.54 à 0.59),
+              dairy 0.56 (0.54 à 0.58)
+Lecture     : 1. Le gain de l'essai 8 se confirme : les trois graines
+                 dépassent le seuil de 0.672 fixé avant l'essai 8, et la
+                 graine 1, qui avait servi à le juger, est la moins
+                 bonne des trois.
+                 La moyenne (0.683) dépasse de 0.031 la seule graine de
+                 l'essai 5D (0.652). Limite : 5D n'a qu'une graine, la
+                 comparaison n'est donc pas faite à égalité.
+              2. Le bruit est du même ordre que sur le réglage de
+                 l'essai 2 : écart-type de 0.010 sur le F1 macro et la
+                 frugalité, contre 0.007 (3 graines ne permettent pas de
+                 les distinguer). Avec 0.010, une différence entre deux
+                 essais a un bruit d'environ 0.014 : le seuil de 0.02
+                 n'en vaut plus qu'environ 1.4 fois, contre 2 avant. Un
+                 écart juste au-dessus de 0.02 reste donc à confirmer.
+              3. L'écart train/validation est stable d'une graine à
+                 l'autre (14.4 à 15.1 points) : l'écart d'environ 15
+                 points de l'essai 8 ne vient pas de la graine.
+              4. Les classes qui varient le plus sont noodles-pasta (117
+                 images de validation, 0.09 entre graines) et rice (75
+                 images, 0.07) ; dairy (115 images) ne varie cette fois
+                 que de 0.03, moins que bread (0.05). bread et dairy
+                 restent les plus faibles.
+Décision    : l'essai 8 est le réseau retenu à ce stade : 191 787
+              paramètres, frugalité de validation 0.683 +/- 0.010 (3
+              graines). Pour la soumission, un seul réseau : la graine
+              2, la meilleure en validation (0.692), surtout grâce à
+              noodles-pasta et rice, deux petites classes bruitées ; le
+              rapport donnera la moyenne, le meilleur des trois étant
+              un peu optimiste. Prochain seuil à battre : 0.703
+              (moyenne + 0.02), à juger sur plusieurs graines.
+
+
+BILAN ET SUITE (2026-11-09)
+===========================
+
+Réglage arrêté après l'essai 10 et la confirmation de l'essai 8 sur 3
+graines. Raisons : le gain de l'essai 8 est confirmé sur 3 graines, les
+derniers leviers testés (essais 9 et 10, une graine chacun) n'ont rien
+apporté, et il reste la comparaison avec les réseaux pré-entraînés, la
+soumission et le rapport avant le 15 novembre.
+
+Réseau retenu : essai 8 (aug_5blocs_60ep), valeurs par défaut de
+CNN_Projet.m (avec cfg.graineEntrainement = 2 pour le fichier soumis).
+5 blocs de convolution 16-32-64-96-128 + global average pooling + couche
+dense, 191 787 paramètres (pénalité 0.048), images 128x128, adam, taux de
+départ 0.001 avec calendrier cosine, augmentation "base", sans poids de
+classes ni dropout, lots de 128, 60 epochs. Frugalité de validation
+0.683 +/- 0.010 (3 graines). Fichier à soumettre (graine 2, la meilleure
+en validation : 0.692) :
+  built/predictions_aug_5blocs_60ep_graine2.json
+
+Résumé des essais (validation, graine 1 sauf mention) :
+  essai  nom                      paramètres  F1 macro  frugalité
+    0    tp_1couche (1 epoch)        349 523    0.215     0.137
+    1    base_4blocs                  99 339    0.514     0.487
+    2    cosine_20ep                  99 339    0.569     0.542
+         (graines 1 à 3 : frugalité 0.548 +/- 0.007)
+    3    cosine_40ep                  99 339    0.619     0.592
+    4    cosine_40ep_aug              99 339    0.623     0.596
+   5A    aug_192                     137 099    0.635     0.599
+   5D    aug_5blocs                  191 787    0.701     0.652
+    6    aug_5blocs_160              191 787    0.699     0.651
+    7    aug_5blocs_poids            191 787    0.699     0.651
+    8    aug_5blocs_60ep             191 787    0.721     0.673
+         (graines 1 à 3 : frugalité 0.683 +/- 0.010)
+    9    aug_5blocs_60ep_drop30      191 787    0.716     0.668
+   10    aug_forte_60ep              191 787    0.697     0.649
+
+Ce qui a amélioré le score : le calendrier cosine (essai 2), les
+entraînements plus longs (essai 3, puis essai 8, confirmé sur 3 graines)
+et le 5e bloc (essai 5D). L'augmentation de base a divisé l'écart
+train/validation par deux (essai 4) sans gain de score mesurable ; gardée
+depuis, elle n'a jamais été testée seule avec le 5e bloc. Sans effet ou
+négatifs : dernier bloc élargi (essai 5A), taille des images (essai 6),
+poids de classes (essai 7), dropout 0.3 avant la couche dense (essai 9),
+augmentation forte (essai 10).
+
+Limites connues : il reste du biais (12 % d'erreurs sur le train) et un
+écart d'environ 15 points avec la validation ; bread et dairy restent
+faibles (F1 de 0.56 à 0.57 en moyenne), bread surtout confondue avec
+egg. Pistes non testées faute de temps : 80 epochs, autre répartition
+des filtres. Variations de couleur et de luminosité écartées
+volontairement (voir l'essai 10).
+
+Étapes restantes :
+- soumission d'essai sur le serveur (sans cocher le classement) pour
+  vérifier le format et voir le score sur le test ;
+- comparaison avec les réseaux pré-entraînés de Nathan, sur le même
+  découpage (graine 42) et avec evaluerReseau.m ;
+- rapport (démarche et chiffres repris de ce journal) ;
+- fusion de la branche cnn/conception-reglage dans main, puis
+  soumission finale avant le 15 novembre.
+
+
+SOUMISSION D'ESSAI SUR LE SERVEUR (2026-11-09)
+----------------------------------------------
+Pourquoi    : vérifier le format du fichier et mesurer le score sur les
+              images de test, jamais utilisées pendant le réglage.
+Fichier     : built/predictions_aug_5blocs_60ep_graine2.json (essai 8,
+              graine 2), 3097 prédictions. Soumis sous le nom du groupe,
+              sans cocher la mise à jour du classement.
+Résultats   :              validation    validation       test
+                           (graine 2)   (moy. 3 graines)  (serveur)
+              F1 macro       0.740         0.731          0.714
+              frugalité      0.692         0.683          0.665
+              exactitude     74.1 %        73.6 %         76.2 %
+              Référence du tuteur (ResNet18 pré-entraîné, 11.6 millions
+              de paramètres) : F1 macro 0.819, frugalité 0.543.
+F1 par classe sur le test (entre parenthèses : moyenne des 3 graines en
+validation) :
+              vegetable-fruit 0.90 (0.88), soup 0.89 (0.86), rice 0.84
+              (0.76), noodles-pasta 0.82 (0.80), meat 0.80 (0.77), egg
+              0.77 (0.72), fried 0.73 (0.72), dessert 0.68 (0.65), bread
+              0.67 (0.57), dairy 0.55 (0.56), seafood 0.50 (0.75)
+Lecture     : 1. Format accepté. Le serveur applique bien la pénalité
+                 des 191 787 paramètres : 0.7137 - 0.0483 = 0.6654.
+              2. La frugalité de test est 0.027 sous la validation de la
+                 graine 2 et 0.018 sous la moyenne des 3 graines. Une
+                 partie de l'écart vient du choix de la meilleure graine
+                 en validation, dont le score était un peu optimiste ;
+                 l'essentiel vient de seafood, dont la baisse (0.50
+                 contre 0.75) retire à elle seule environ 0.02 au F1
+                 macro.
+              3. seafood chute : précision 0.35 pour un rappel de 0.85.
+                 Le fichier soumis prédit 128 images seafood, dont
+                 environ 45 justes ; avec ce rappel, le test n'en
+                 contiendrait qu'environ 53, soit 1.7 % des images,
+                 contre 9.0 % en validation (240 sur 2 659). Estimation
+                 tirée des chiffres du serveur et du fichier soumis,
+                 sans les étiquettes du test.
+                 Les fausses alarmes restent du même ordre : 83 images
+                 d'autres classes prédites seafood, soit 2.7 % de ces
+                 images, contre 2.4 % en validation (essai 5D, seule
+                 matrice de confusion détaillée). Face à seulement 45
+                 vraies seafood, elles font tomber la précision : la
+                 baisse viendrait de la répartition des classes du test
+                 plus que d'un réseau moins bon.
+                 L'exactitude plus haute sur le test (76.2 % contre
+                 74.1 %) malgré un F1 macro plus bas va dans le même
+                 sens : le test semble compter relativement plus
+                 d'images des classes bien reconnues.
+              4. bread (0.67) et rice (0.84) font mieux que la moyenne
+                 de validation ; pour rice, la graine 2 était déjà
+                 au-dessus de cette moyenne. dairy reste faible (0.55).
+              5. La précision et le rappel moyens affichés par le
+                 serveur sont pondérés par l'inverse de la fréquence des
+                 classes : ils ne se comparent pas à nos moyennes
+                 simples. Le F1 macro, la frugalité et l'exactitude se
+                 comparent (l'exactitude dépend toutefois de la
+                 répartition des classes).
+              6. Avec 60 fois moins de paramètres, le réseau dépasse la
+                 référence du tuteur de 0.12 en frugalité, malgré un F1
+                 macro plus faible (0.714 contre 0.819).
+Décision    : frugalité de test du CNN maison retenue pour le rapport :
+              0.665. Ce fichier reste notre candidat pour la soumission
+              finale (même nom de groupe, mise à jour du classement
+              cochée une seule fois) ; le choix final se fera après la
+              comparaison avec les réseaux pré-entraînés de Nathan.
