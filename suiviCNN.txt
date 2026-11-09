@@ -930,6 +930,68 @@ Décision    : ne pas adopter. L'option "forte" reste dans le code ;
               avec les graines 2 et 3.
 
 
+----------------------------------------------------------------------
+CONFIRMATION DE L'ESSAI 8 : aug_5blocs_60ep, graines 2 et 3 (2026-11-09)
+----------------------------------------------------------------------
+Pourquoi    : le gain de l'essai 8 (+0.021) était à la limite du seuil
+              de 0.02, sur une seule graine. Il faut le confirmer avant
+              d'en faire le réseau final, et le rapport a besoin d'une
+              moyenne et d'un écart-type.
+Changement  : aucun. Réglage de l'essai 8 (valeurs par défaut du
+              script) relancé avec les graines d'entraînement 2 et 3
+              (même validation, graine de découpage 42).
+Réglages    : 128x128, filtres 16-32-64-96-128, adam, taux de départ
+              0.001, cosine, augmentation "base", sans poids de classes,
+              sans dropout, lots de 128, 60 epochs. Code du commit
+              20a3ddb (même réseau et mêmes réglages que l'essai 8).
+Durée       : 45.9 min (graine 2) et 48.0 min (graine 3).
+Résultats   : graine  train   validation  écart   F1 macro  frugalité
+                1     87.9 %    72.8 %    15.1     0.721     0.673
+                2     88.6 %    74.1 %    14.4     0.740     0.692
+                3     88.2 %    73.7 %    14.4     0.732     0.683
+              moyenne 88.2 %    73.6 %    14.7     0.731     0.683
+              écart-type
+                      0.3 pt    0.7 pt     0.4     0.010     0.010
+              Écart maximal entre deux graines : 0.019 de frugalité.
+F1 par classe (moyenne des 3 graines, mini à maxi) :
+              vegetable-fruit 0.88 (0.87 à 0.89), soup 0.86 (0.85 à
+              0.87), noodles-pasta 0.80 (0.76 à 0.86), meat 0.77 (0.76
+              à 0.78), rice 0.76 (0.73 à 0.80), seafood 0.75 (0.74 à
+              0.77), egg 0.72 (0.70 à 0.74), fried 0.72 (0.69 à 0.74),
+              dessert 0.65 (0.64 à 0.66), bread 0.57 (0.54 à 0.59),
+              dairy 0.56 (0.54 à 0.58)
+Lecture     : 1. Le gain de l'essai 8 se confirme : les trois graines
+                 dépassent le seuil de 0.672 fixé avant l'essai 8, et la
+                 graine 1, qui avait servi à le juger, est la moins
+                 bonne des trois.
+                 La moyenne (0.683) dépasse de 0.031 la seule graine de
+                 l'essai 5D (0.652). Limite : 5D n'a qu'une graine, la
+                 comparaison n'est donc pas faite à égalité.
+              2. Le bruit est du même ordre que sur le réglage de
+                 l'essai 2 : écart-type de 0.010 sur le F1 macro et la
+                 frugalité, contre 0.007 (3 graines ne permettent pas de
+                 les distinguer). Avec 0.010, une différence entre deux
+                 essais a un bruit d'environ 0.014 : le seuil de 0.02
+                 n'en vaut plus qu'environ 1.4 fois, contre 2 avant. Un
+                 écart juste au-dessus de 0.02 reste donc à confirmer.
+              3. L'écart train/validation est stable d'une graine à
+                 l'autre (14.4 à 15.1 points) : l'écart d'environ 15
+                 points de l'essai 8 ne vient pas de la graine.
+              4. Les classes qui varient le plus sont noodles-pasta (117
+                 images de validation, 0.09 entre graines) et rice (75
+                 images, 0.07) ; dairy (115 images) ne varie cette fois
+                 que de 0.03, moins que bread (0.05). bread et dairy
+                 restent les plus faibles.
+Décision    : l'essai 8 est le réseau retenu à ce stade : 191 787
+              paramètres, frugalité de validation 0.683 +/- 0.010 (3
+              graines). Pour la soumission, un seul réseau : la graine
+              2, la meilleure en validation (0.692), surtout grâce à
+              noodles-pasta et rice, deux petites classes bruitées ; le
+              rapport donnera la moyenne, le meilleur des trois étant
+              un peu optimiste. Prochain seuil à battre : 0.703
+              (moyenne + 0.02), à juger sur plusieurs graines.
+
+
 PROCHAINS ESSAIS PRÉVUS
 =======================
 
@@ -941,8 +1003,7 @@ PROCHAINS ESSAIS PRÉVUS
   élargi (essai 5A), taille des images (essai 6), poids de classes
   (essai 7), dropout 0.3 avant la couche dense (essai 9), augmentation
   forte (essai 10).
-- En cours : graines 2 et 3 de l'essai 8, pour confirmer son gain (à la
-  limite du seuil) et donner moyenne et écart-type dans le rapport.
+- Fait : graines 2 et 3 de l'essai 8, gain confirmé (0.683 +/- 0.010).
 - S'il reste du temps : un dernier essai contre le biais (réseau un peu
   plus large, sachant qu'élargir le dernier bloc n'a rien donné à
   l'essai 5A, ou 80 epochs).

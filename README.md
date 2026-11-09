@@ -168,7 +168,7 @@ Décommenter seulement la ligne `ExecutionEnvironment` provoque une erreur de sy
 - [x] Gestion du déséquilibre des classes (rice : 376 images contre 2000 pour dessert et soup) : option `cfg.poidsClasses`, testée à l'essai 7, sans gain sur le score
 - [x] Graines aléatoires fixes (`rng`) : découpage train/validation et entraînement reproductibles
 - [x] Outils de réglage : réglages regroupés en tête de script, lecture des images accélérée, journal des essais (`built/essais.csv`) et historique par epoch (`built/historique_<essai>_graine<n>.csv`)
-- [ ] Réseau n°1 (CNN « maison ») : 5 blocs + global average pooling, 191 787 paramètres. Meilleur résultat à ce stade : frugalité 0,673 sur la validation (calendrier `cosine`, 60 epochs, augmentation de données). Réglage en cours, détail des essais dans `suiviCNN.txt`
+- [ ] Réseau n°1 (CNN « maison ») : 5 blocs + global average pooling, 191 787 paramètres. Meilleur résultat à ce stade : frugalité 0,683 ± 0,010 sur la validation (moyenne sur 3 graines d'entraînement ; calendrier `cosine`, 60 epochs, augmentation de données). Réglage en cours, détail des essais dans `suiviCNN.txt`
 - [ ] Réseau n°2 (par ex. transfer learning sur un réseau pré-entraîné léger)
 - [x] Évaluation sur la validation : exactitude, F1 par classe, F1 macro, nombre de paramètres, frugalité, matrice de confusion (`evaluerReseau.m`)
 - [x] Génération du JSON de prédictions sur le test (`built/predictions_<essai>_graine<n>.json`) et sauvegarde du réseau entraîné (`built/reseau_<essai>_graine<n>.mat`)
