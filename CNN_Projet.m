@@ -22,7 +22,9 @@ cfg.tauxApprentissage  = 0.001;   % taux de départ
 % dernière epoch (qui ne met alors presque plus à jour les poids, seulement
 % les statistiques de la batch norm)
 cfg.calendrierTaux     = "cosine";
-cfg.augmentation       = true;    % true : retournements, translations et zooms aléatoires sur le train
+% Augmentation du train : "aucune" ; "base" = retournement horizontal,
+% translations et zoom ; "forte" = base + retournement vertical et rotations
+cfg.augmentation       = "base";
 cfg.poidsClasses       = "aucun"; % "inverse" : les erreurs sur les petites classes comptent plus
 cfg.dropout            = 0;       % probabilité d'effacer chaque valeur avant la couche dense (0 = pas de dropout)
 cfg.tailleLot          = 128;
@@ -30,8 +32,15 @@ cfg.nbEpochs           = 60;      % environ 45 min sur le CPU du Mac
 cfg.afficherCourbes    = true;    % false pour enchaîner des essais sans fenêtre graphique
 
 % Valeur inattendue : erreur tout de suite plutôt qu'à la fin du script
-% (le journal ne pourrait pas être écrit)
+% (le journal ne pourrait pas être écrit). Les réglages texte doivent être
+% un seul texte ; on les convertit en string (un texte entre apostrophes,
+% de type char, ferait échouer l'écriture du journal).
+for champ = ["nomEssai" "optimiseur" "calendrierTaux" "augmentation" "poidsClasses"]
+    mustBeTextScalar(cfg.(champ));
+    cfg.(champ) = string(cfg.(champ));
+end
 mustBeMember(cfg.calendrierTaux, ["none" "cosine"]);
+mustBeMember(cfg.augmentation, ["aucune" "base" "forte"]);
 mustBeMember(cfg.poidsClasses, ["aucun" "inverse"]);
 validateattributes(cfg.dropout, "numeric", {"scalar", "real", ">=", 0, "<", 1});
 
@@ -79,8 +88,9 @@ end
 
 % augmentedImageDatastore redimensionne les images et convertit celles en
 % niveaux de gris en RGB. La normalisation est faite par la couche d'entrée
-% du réseau (centrage sur la moyenne du train, augmenté si cfg.augmentation).
-% Augmentation de données (train seulement, si cfg.augmentation) : à chaque
+% du réseau (centrage sur la moyenne du train, augmenté si cfg.augmentation
+% n'est pas "aucune").
+% Augmentation de données "base" (train seulement) : à chaque
 % epoch, chaque image est transformée au hasard, ce qui limite
 % l'apprentissage par coeur (variance) sans ajouter de paramètre.
 %   - retournement horizontal une fois sur deux (un plat retourné reste le
@@ -97,19 +107,36 @@ end
 % non augmentées) et non en noir (valeur par défaut) : la validation et le
 % test n'ont jamais de bandes noires, et après le centrage de la couche
 % d'entrée ces zones valent environ 0, donc n'apportent aucune information.
-% Pas de retournement vertical (images peu naturelles), de rotation (coins
-% à remplir, angle peu utile pour des photos de plats) ni de changement de
-% couleur (indice clé pour la nourriture).
+% Augmentation "forte" : la même, plus un retournement vertical une fois
+% sur deux et une rotation au hasard entre -30 et +30 degrés (coins
+% découverts remplis de la même couleur moyenne). Écartés au départ
+% (retournement vertical jugé peu naturel, rotation qui découvre des
+% coins), ils sont testés à l'essai 10 : la plupart des photos sont prises
+% de dessus ou en plongée, les coins sont remplis comme pour les
+% translations, et l'essai 9 suggère que l'apprentissage par coeur se fait
+% dans les couches de convolution, que l'augmentation touche directement.
+% Pas de changement de couleur (indice clé pour la nourriture).
 % Reproductibilité : les transformations sont tirées avec le générateur
 % aléatoire de la session, donc fixées par cfg.graineEntrainement (ce ne
 % serait plus le cas avec une préparation des données en parallèle).
-if cfg.augmentation
+if cfg.augmentation == "base"
     augmenteur = imageDataAugmenter( ...
         RandXReflection=true, ...
         RandXTranslation=[-40 40], ...
         RandYTranslation=[-40 40], ...
         RandScale=[0.9 1.1], ...
         FillValue=[146 117 88]);   % couleur moyenne RGB du train
+elseif cfg.augmentation == "forte"
+    augmenteur = imageDataAugmenter( ...
+        RandXReflection=true, ...
+        RandYReflection=true, ...
+        RandRotation=[-30 30], ...
+        RandXTranslation=[-40 40], ...
+        RandYTranslation=[-40 40], ...
+        RandScale=[0.9 1.1], ...
+        FillValue=[146 117 88]);
+end
+if cfg.augmentation ~= "aucune"
     augTrain = augmentedImageDatastore(cfg.tailleImage, imgDataTrain, ...
         ColorPreprocessing="gray2rgb", DataAugmentation=augmenteur);
 else
@@ -261,7 +288,7 @@ fprintf("Réseau entraîné sauvegardé dans %s\n", fichierReseau);
 % globales utilisées en prédiction. Elle peut donc s'écarter, dans un sens
 % ou dans l'autre, de l'exactitude train finale calculée plus bas, qui
 % reste la référence pour comparer train et validation. Avec
-% cfg.augmentation, ces colonnes sont en plus mesurées sur des images
+% l'augmentation (cfg.augmentation différent de "aucune"), ces colonnes sont en plus mesurées sur des images
 % transformées (tâche plus difficile), donc nettement plus basses que
 % l'exactitude train finale, calculée sur les vraies images. Avec
 % cfg.dropout > 0, elles sont aussi mesurées avec le dropout actif, ce qui
@@ -336,15 +363,11 @@ fprintf("Prédictions du test écrites dans %s (%d images)\n", jsonFile, predict
 
 %% Journal des essais
 % Une ligne par exécution dans built/essais.csv (créé au premier essai)
-texteAugmentation = "non";
-if cfg.augmentation
-    texteAugmentation = "oui";
-end
 ligne = table(string(datetime("now", Format="yyyy-MM-dd HH:mm")), cfg.nomEssai, ...
     cfg.graineDecoupage, cfg.graineEntrainement, ...
     string(sprintf("%dx%d", cfg.tailleImage(1), cfg.tailleImage(2))), ...
     strjoin(string(cfg.filtres), "-"), cfg.optimiseur, cfg.tauxApprentissage, ...
-    cfg.calendrierTaux, texteAugmentation, cfg.poidsClasses, cfg.dropout, cfg.tailleLot, cfg.nbEpochs, ...
+    cfg.calendrierTaux, cfg.augmentation, cfg.poidsClasses, cfg.dropout, cfg.tailleLot, cfg.nbEpochs, ...
     resVal.nbParametres, trainAccuracy, resVal.exactitude, resVal.f1Macro, ...
     resVal.frugalite, dureeMinutes, ...
     VariableNames=["date" "essai" "graineDecoupage" "graineEntrainement" ...
