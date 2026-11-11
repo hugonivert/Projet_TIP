@@ -42,14 +42,17 @@ Projet_TIP/
 ├── makeCourseProgressOutputFcn.m
 ├── prepareData.m
 ├── resnet18_food11.m
+├── squeezenet_food11.m
+├── suiviResNet18.txt
 ├── README.md
 ├── suiviCNN.txt
 ├── .gitignore
 ├── built/                <- créé par les scripts, ignoré par git
 │   ├── essais.csv                      (CNN personnel)
 │   ├── essais_resnet18.csv             (ResNet-18)
-│   ├── validation_fichiers.txt         (ResNet-18 : liste des images de validation)
-│   ├── confusion_<essai>_graine<n>.csv (ResNet-18)
+│   ├── essais_squeezenet.csv           (SqueezeNet)
+│   ├── validation_fichiers.txt         (ResNet-18 et SqueezeNet : liste des images de validation)
+│   ├── confusion_<essai>_graine<n>.csv (ResNet-18 et SqueezeNet)
 │   ├── historique_<essai>_graine<n>.csv
 │   ├── predictions_<essai>_graine<n>.json
 │   └── reseau_<essai>_graine<n>.mat
@@ -113,7 +116,7 @@ Si vous avez `1`, dans `CNN_Projet.m`, à la fin du bloc `trainingOptions` :
 
 Décommenter seulement la ligne `ExecutionEnvironment` provoque une erreur de syntaxe : il faut aussi modifier la ligne `Metrics` au-dessus.
 
-`resnet18_food11.m` n'a pas besoin de cette modification : il utilise le GPU automatiquement s'il est disponible.
+`resnet18_food11.m` et `squeezenet_food11.m` n'ont pas besoin de cette modification : ils utilisent le GPU automatiquement s'il est disponible.
 
 ### 1.7 Lancer le ResNet-18 (réseau n°2)
 
@@ -128,6 +131,12 @@ Il vaut mieux le lancer sur une machine avec GPU NVIDIA : sur le CPU d'un Mac, l
 
 `validation_fichiers.txt` contient la liste triée des 2 659 images de validation. Il doit être identique à celui obtenu sur une autre machine (par exemple avec le test rapide) : c'est la preuve que les deux réseaux sont comparés sur les mêmes images. Le journal note aussi la machine (nom du GPU ou `cpu`) et la version de MATLAB : les durées ne se comparent qu'entre essais faits sur la même machine.
 
+### 1.8 Lancer le SqueezeNet (réseau n°3)
+
+`squeezenet_food11.m` entraîne un SqueezeNet pré-entraîné sur ImageNet (transfer learning, 728 139 paramètres, pénalité de frugalité 0,126, images 227x227). Script de Nathan, complété pour être évalué exactement comme les deux autres réseaux : même découpage train/validation (graine 42), même augmentation `"base"`, mêmes scores (`evaluerReseau.m`), mêmes fichiers de sortie. La dernière couche est remplacée par une couche à 11 classes, entraînée avec un taux 10 fois plus fort que le reste du réseau. Les réglages sont dans la section `Paramètres` en haut du script (par défaut : adam, taux 3e-4 avec calendrier `cosine`, lots de 64, 20 epochs). Aucun module à installer : SqueezeNet est fourni avec le Deep Learning Toolbox.
+
+Même déroulement que pour le ResNet-18 (voir 1.7) : test rapide avec `essaiRapide = true`, puis `essaiRapide = false` et `graineEntrainement` = 1, 2 puis 3. Résultats dans `built/essais_squeezenet.csv` et les fichiers `historique_`, `confusion_`, `predictions_` et `reseau_squeezenet_base_20ep_graine<n>` (réseau d'environ 3 Mo). `validation_fichiers.txt` doit être identique à celui du ResNet-18.
+
 ---
 
 ## 2. Architecture du code
@@ -141,6 +150,8 @@ Il vaut mieux le lancer sur une machine avec GPU NVIDIA : sur le CPU d'un Mac, l
 | `evaluerReseau.m` | Fonction commune d'évaluation : exactitude, F1 par classe, F1 macro, nombre de paramètres, score de frugalité, matrice de confusion. À utiliser pour tous les réseaux du groupe afin que les scores soient comparables. |
 | `makeCourseProgressOutputFcn.m` | Courbes d'entraînement lissées avec les epochs marquées, reprise du fichier du TP CIFAR-10, avec la courbe « Test set » renommée « Validation set ». |
 | `resnet18_food11.m` | Réseau n°2 : ResNet-18 pré-entraîné (transfer learning), entraîné et évalué comme le CNN personnel (voir 1.7). Journal `built/essais_resnet18.csv`. |
+| `squeezenet_food11.m` | Réseau n°3 : SqueezeNet pré-entraîné (transfer learning), entraîné et évalué comme les deux autres réseaux (voir 1.8). Journal `built/essais_squeezenet.csv`. |
+| `suiviResNet18.txt` | Journal de bord du ResNet-18 : choix de conception justifiés, et pour chaque entraînement les réglages, les résultats comparés au CNN personnel, l'analyse et la décision. |
 | `suiviCNN.txt` | Journal de bord du CNN personnel : règles de la démarche, choix de conception justifiés, et pour chaque essai la raison, les réglages, les résultats, l'analyse et la décision prise. Sert de base au rapport. |
 | `.gitignore` | Exclut `food-11/`, `built/`, `.DS_Store` et le fichier du sujet du dépôt. |
 
@@ -190,7 +201,8 @@ Il vaut mieux le lancer sur une machine avec GPU NVIDIA : sur le CPU d'un Mac, l
 - [x] Graines aléatoires fixes (`rng`) : découpage train/validation et entraînement reproductibles
 - [x] Outils de réglage : réglages regroupés en tête de script, lecture des images accélérée, journal des essais (`built/essais.csv`) et historique par epoch (`built/historique_<essai>_graine<n>.csv`)
 - [x] Réseau n°1 (CNN « maison ») : 5 blocs + global average pooling, 191 787 paramètres (essai 8, valeurs par défaut de `CNN_Projet.m`). Frugalité 0,683 ± 0,010 sur la validation (moyenne sur 3 graines d'entraînement ; calendrier `cosine`, 60 epochs, augmentation de données). Réglage arrêté ; prédictions à soumettre : `built/predictions_aug_5blocs_60ep_graine2.json` (graine 2, obtenue avec `cfg.graineEntrainement = 2`). Soumission d'essai sur le serveur (sans mise à jour du classement) : frugalité de test 0,665 (F1 macro 0,714), contre 0,543 pour la référence ResNet18 du tuteur. Détail des essais et bilan dans `suiviCNN.txt`
-- [ ] Réseau n°2 : ResNet-18 pré-entraîné (`resnet18_food11.m`). Script prêt et vérifié avec le test rapide (même validation que le CNN personnel) ; entraînement complet à lancer sur GPU avec les graines 1, 2 et 3 (voir 1.7)
+- [ ] Réseau n°2 : ResNet-18 pré-entraîné (`resnet18_food11.m`). Graine 1 entraînée sur le CPU du Mac (71 min) : F1 macro 0,922, frugalité 0,647 sur la validation, en dessous du CNN personnel (0,683) malgré un bien meilleur F1. Graines 2 et 3 en cours (voir `suiviResNet18.txt`)
+- [ ] Réseau n°3 : SqueezeNet pré-entraîné (`squeezenet_food11.m`). Script complété et vérifié avec le test rapide (même validation que les autres réseaux) ; entraînement à lancer avec les graines 1, 2 et 3 (voir 1.8)
 - [x] Évaluation sur la validation : exactitude, F1 par classe, F1 macro, nombre de paramètres, frugalité, matrice de confusion (`evaluerReseau.m`)
 - [x] Génération du JSON de prédictions sur le test (`built/predictions_<essai>_graine<n>.json`) et sauvegarde du réseau entraîné (`built/reseau_<essai>_graine<n>.mat`)
 - [ ] Rapport
