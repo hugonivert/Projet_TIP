@@ -39,7 +39,6 @@ Le jeu de données **n'est pas sur GitHub** (trop lourd, et le sujet interdit le
 Projet_TIP/
 ├── CNN_Projet.m
 ├── evaluerReseau.m
-├── lenet5_food11.m
 ├── makeCourseProgressOutputFcn.m
 ├── prepareData.m
 ├── resnet18_food11.m
@@ -142,7 +141,6 @@ Il vaut mieux le lancer sur une machine avec GPU NVIDIA : sur le CPU d'un Mac, l
 | `evaluerReseau.m` | Fonction commune d'évaluation : exactitude, F1 par classe, F1 macro, nombre de paramètres, score de frugalité, matrice de confusion. À utiliser pour tous les réseaux du groupe afin que les scores soient comparables. |
 | `makeCourseProgressOutputFcn.m` | Courbes d'entraînement lissées avec les epochs marquées, reprise du fichier du TP CIFAR-10, avec la courbe « Test set » renommée « Validation set ». |
 | `resnet18_food11.m` | Réseau n°2 : ResNet-18 pré-entraîné (transfer learning), entraîné et évalué comme le CNN personnel (voir 1.7). Journal `built/essais_resnet18.csv`. |
-| `lenet5_food11.m` | LeNet-5 (réseau classique de 1998, entraîné de zéro, images 32x32), script de départ de Nathan. Pas encore adapté à la même évaluation que les autres réseaux. |
 | `suiviCNN.txt` | Journal de bord du CNN personnel : règles de la démarche, choix de conception justifiés, et pour chaque essai la raison, les réglages, les résultats, l'analyse et la décision prise. Sert de base au rapport. |
 | `.gitignore` | Exclut `food-11/`, `built/`, `.DS_Store` et le fichier du sujet du dépôt. |
 
