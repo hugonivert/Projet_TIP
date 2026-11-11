@@ -127,3 +127,60 @@ Décision    : le CNN personnel reste le réseau à soumettre (meilleure
               frugalité). Attendre les 3 graines de Sam pour la moyenne
               et l'écart-type, et soumettre ces prédictions au serveur
               sans cocher le classement pour obtenir le score de test.
+
+
+----------------------------------------------------------------------
+ENTRAÎNEMENT 2 : resnet18_base_15ep, graine 2 (2026-11-11)
+----------------------------------------------------------------------
+Pourquoi    : une seule graine ne dit pas si l'écart de 0.036 avec le
+              CNN tient. Deuxième graine lancée sur le Mac sans attendre
+              les calculs de Sam sur GPU.
+Changement  : aucun. Même réglage que l'entraînement 1, graine
+              d'entraînement 2 (même validation, graine de découpage 42).
+Réglages    : 224x224, adam, taux de départ 3e-4, cosine, augmentation
+              "base", lots de 64, 15 epochs, graine 2. Code du commit
+              1b8752f.
+Durée       : 88.7 min sur le CPU du Mac. Non comparable aux 71.1 min de
+              la graine 1 : pendant ce calcul, MATLAB a aussi servi aux
+              tests rapides du SqueezeNet et aux vérifications de leur
+              relecture.
+Résultats   : graine  train    validation  écart   F1 macro  frugalité
+                1     99.98 %   91.6 %      8.4     0.922     0.647
+                2     99.99 %   91.2 %      8.8     0.916     0.641
+              moyenne 99.99 %   91.4 %      8.6     0.919     0.644
+              Écart entre les deux graines : 0.006 de F1 macro et de
+              frugalité.
+F1 par classe (graine 2 ; entre parenthèses : moyenne des 2 graines) :
+              noodles-pasta 0.98 (0.98), rice 0.97 (0.97), soup 0.96
+              (0.96), vegetable-fruit 0.96 (0.96), seafood 0.92 (0.92),
+              meat 0.91 (0.92), fried 0.90 (0.90), egg 0.89 (0.89),
+              dessert 0.88 (0.89), dairy 0.86 (0.87), bread 0.85 (0.85)
+Courbes     : epoch  taux     perte train  exactitude   perte
+                              (lots)       validation   validation
+                1   3.0e-4      0.71          0.82         0.58
+                5   2.4e-4      0.13          0.85         0.54
+               10   8.5e-5      0.014         0.91         0.35
+               15   3e-9        0.005         0.91         0.34
+              Validation entre 0.910 et 0.916 sur les 5 dernières
+              epochs.
+Lecture     : 1. La graine 2 confirme la graine 1 : 0.006 d'écart sur le
+                 F1 macro et la frugalité, moins que l'écart-type du CNN
+                 entre graines (0.010). Avec 2 graines seulement,
+                 l'écart-type du ResNet-18 reste mal connu.
+              2. Le CNN reste devant en frugalité de 0.039 en moyenne
+                 (0.683 contre 0.644). La conclusion de l'entraînement 1
+                 tient.
+              3. Les classes se comportent de la même façon d'une graine
+                 à l'autre. La plus variable est dairy (0.89 puis 0.86) :
+                 même rappel (103 images sur 115), mais plus d'images
+                 d'autres classes prédites dairy. bread reste la plus
+                 faible, toujours confondue surtout avec egg (20 + 8 = 28
+                 images, contre 31 à la graine 1).
+              4. Comme pour la graine 1, la perte de validation baisse
+                 jusqu'à la fin (0.58 à 0.34) : pas de dégradation sur
+                 15 epochs.
+Décision    : moyenne retenue à ce stade pour le ResNet-18 : F1 macro
+              0.919, frugalité 0.644 (2 graines). Le CNN personnel reste
+              le réseau à soumettre. La graine 3 (calculs de Sam sur GPU)
+              complétera la moyenne ; ses résultats ne se comparent aux
+              graines 1 et 2 qu'avec prudence (machine différente).
