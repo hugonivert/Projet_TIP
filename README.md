@@ -17,6 +17,7 @@ Le sujet complet est dans `[SUJET]_food-11.html` (non versionné, à récupérer
 | Deep Learning Toolbox | obligatoire (réseau, `trainnet`, `augmentedImageDatastore`, `confusionmat`) |
 | Image Processing Toolbox | obligatoire (`montage`) |
 | Parallel Computing Toolbox | optionnel, uniquement pour entraîner sur GPU (NVIDIA) |
+| Deep Learning Toolbox Model for ResNet-18 Network | uniquement pour `resnet18_food11.m` (module à installer depuis le menu Home, Add-Ons ; MATLAB **R2024b ou plus récent**) |
 
 Pour vérifier les toolboxes installées, tapez `ver` dans la console MATLAB.
 
@@ -38,13 +39,18 @@ Le jeu de données **n'est pas sur GitHub** (trop lourd, et le sujet interdit le
 Projet_TIP/
 ├── CNN_Projet.m
 ├── evaluerReseau.m
+├── lenet5_food11.m
 ├── makeCourseProgressOutputFcn.m
 ├── prepareData.m
+├── resnet18_food11.m
 ├── README.md
 ├── suiviCNN.txt
 ├── .gitignore
-├── built/                <- créé par CNN_Projet.m, ignoré par git
-│   ├── essais.csv
+├── built/                <- créé par les scripts, ignoré par git
+│   ├── essais.csv                      (CNN personnel)
+│   ├── essais_resnet18.csv             (ResNet-18)
+│   ├── validation_fichiers.txt         (ResNet-18 : liste des images de validation)
+│   ├── confusion_<essai>_graine<n>.csv (ResNet-18)
 │   ├── historique_<essai>_graine<n>.csv
 │   ├── predictions_<essai>_graine<n>.json
 │   └── reseau_<essai>_graine<n>.mat
@@ -108,6 +114,21 @@ Si vous avez `1`, dans `CNN_Projet.m`, à la fin du bloc `trainingOptions` :
 
 Décommenter seulement la ligne `ExecutionEnvironment` provoque une erreur de syntaxe : il faut aussi modifier la ligne `Metrics` au-dessus.
 
+`resnet18_food11.m` n'a pas besoin de cette modification : il utilise le GPU automatiquement s'il est disponible.
+
+### 1.7 Lancer le ResNet-18 (réseau n°2)
+
+`resnet18_food11.m` entraîne un ResNet-18 pré-entraîné sur ImageNet (transfer learning, 11 186 955 paramètres, images 224x224) et l'évalue exactement comme le CNN personnel : même découpage train/validation (graine 42), même augmentation `"base"`, mêmes scores (`evaluerReseau.m`). Il reprend le script de départ de Nathan (`resnet34_food11.m`, renommé). Comme dans `CNN_Projet.m`, tous les réglages sont dans le bloc `cfg` en haut du script (par défaut : adam, taux 3e-4 avec calendrier `cosine`, lots de 64, 15 epochs).
+
+Il vaut mieux le lancer sur une machine avec GPU NVIDIA : sur le CPU d'un Mac, les images 224x224 rendent l'entraînement très long.
+
+1. Vérifier les prérequis (voir 1.1) : MATLAB R2024b ou plus récent, module ResNet-18 installé. Pour le GPU : Parallel Computing Toolbox, et `canUseGPU` doit renvoyer `1`.
+2. **Test rapide** : mettre `cfg.essaiRapide = true` et lancer le script depuis la racine du dépôt. Il s'entraîne sur 20 images par classe pendant 2 epochs (moins d'une minute sur le CPU d'un Mac) pour vérifier que tout fonctionne. Ses scores n'ont aucune valeur, ses fichiers finissent par `_rapide` et le journal n'est pas modifié.
+3. **Vrais calculs** : remettre `cfg.essaiRapide = false`, puis lancer le script trois fois, avec `cfg.graineEntrainement = 1`, puis `2`, puis `3` (sans rien changer d'autre). Si la mémoire du GPU ne suffit pas, passer `cfg.tailleLot` à 32 (la valeur est notée dans le journal).
+4. **Fichiers à renvoyer** (dans `built/`) : `essais_resnet18.csv`, `validation_fichiers.txt`, et pour chaque graine `historique_...`, `confusion_...` et `predictions_...`. Le réseau `reseau_....mat` (environ 45 Mo) n'est pas nécessaire.
+
+`validation_fichiers.txt` contient la liste triée des 2 659 images de validation. Il doit être identique à celui obtenu sur une autre machine (par exemple avec le test rapide) : c'est la preuve que les deux réseaux sont comparés sur les mêmes images. Le journal note aussi la machine (nom du GPU ou `cpu`) et la version de MATLAB : les durées ne se comparent qu'entre essais faits sur la même machine.
+
 ---
 
 ## 2. Architecture du code
@@ -120,6 +141,8 @@ Décommenter seulement la ligne `ExecutionEnvironment` provoque une erreur de sy
 | `CNN_Projet.m` | Pipeline principal : réglages, données, réseau, entraînement, évaluation, export JSON, journal des essais. |
 | `evaluerReseau.m` | Fonction commune d'évaluation : exactitude, F1 par classe, F1 macro, nombre de paramètres, score de frugalité, matrice de confusion. À utiliser pour tous les réseaux du groupe afin que les scores soient comparables. |
 | `makeCourseProgressOutputFcn.m` | Courbes d'entraînement lissées avec les epochs marquées, reprise du fichier du TP CIFAR-10, avec la courbe « Test set » renommée « Validation set ». |
+| `resnet18_food11.m` | Réseau n°2 : ResNet-18 pré-entraîné (transfer learning), entraîné et évalué comme le CNN personnel (voir 1.7). Journal `built/essais_resnet18.csv`. |
+| `lenet5_food11.m` | LeNet-5 (réseau classique de 1998, entraîné de zéro, images 32x32), script de départ de Nathan. Pas encore adapté à la même évaluation que les autres réseaux. |
 | `suiviCNN.txt` | Journal de bord du CNN personnel : règles de la démarche, choix de conception justifiés, et pour chaque essai la raison, les réglages, les résultats, l'analyse et la décision prise. Sert de base au rapport. |
 | `.gitignore` | Exclut `food-11/`, `built/`, `.DS_Store` et le fichier du sujet du dépôt. |
 
@@ -169,7 +192,7 @@ Décommenter seulement la ligne `ExecutionEnvironment` provoque une erreur de sy
 - [x] Graines aléatoires fixes (`rng`) : découpage train/validation et entraînement reproductibles
 - [x] Outils de réglage : réglages regroupés en tête de script, lecture des images accélérée, journal des essais (`built/essais.csv`) et historique par epoch (`built/historique_<essai>_graine<n>.csv`)
 - [x] Réseau n°1 (CNN « maison ») : 5 blocs + global average pooling, 191 787 paramètres (essai 8, valeurs par défaut de `CNN_Projet.m`). Frugalité 0,683 ± 0,010 sur la validation (moyenne sur 3 graines d'entraînement ; calendrier `cosine`, 60 epochs, augmentation de données). Réglage arrêté ; prédictions à soumettre : `built/predictions_aug_5blocs_60ep_graine2.json` (graine 2, obtenue avec `cfg.graineEntrainement = 2`). Soumission d'essai sur le serveur (sans mise à jour du classement) : frugalité de test 0,665 (F1 macro 0,714), contre 0,543 pour la référence ResNet18 du tuteur. Détail des essais et bilan dans `suiviCNN.txt`
-- [ ] Réseau n°2 (par ex. transfer learning sur un réseau pré-entraîné léger)
+- [ ] Réseau n°2 : ResNet-18 pré-entraîné (`resnet18_food11.m`). Script prêt et vérifié avec le test rapide (même validation que le CNN personnel) ; entraînement complet à lancer sur GPU avec les graines 1, 2 et 3 (voir 1.7)
 - [x] Évaluation sur la validation : exactitude, F1 par classe, F1 macro, nombre de paramètres, frugalité, matrice de confusion (`evaluerReseau.m`)
 - [x] Génération du JSON de prédictions sur le test (`built/predictions_<essai>_graine<n>.json`) et sauvegarde du réseau entraîné (`built/reseau_<essai>_graine<n>.mat`)
 - [ ] Rapport
