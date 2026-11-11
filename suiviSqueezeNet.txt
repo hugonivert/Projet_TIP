@@ -132,3 +132,78 @@ Décision    : le SqueezeNet devient le candidat pour la soumission
               Le choix définitif se fera après une soumission d'essai
               sur le serveur (sans cocher le classement), à comparer à
               la frugalité de test du CNN (0.665).
+
+
+----------------------------------------------------------------------
+ENTRAÎNEMENTS 2 ET 3 : squeezenet_base_20ep, graines 2 et 3 (2026-11-11)
+----------------------------------------------------------------------
+Pourquoi    : vérifier sur 3 graines que l'avance du SqueezeNet sur le
+              CNN (0.064 avec la graine 1) n'est pas due au hasard, avant
+              d'en faire le réseau à soumettre.
+Changement  : aucun. Même réglage que l'entraînement 1, graines
+              d'entraînement 2 et 3 (même validation, graine de
+              découpage 42). Lancées à la suite sur le Mac.
+Réglages    : 227x227, adam, taux de départ 3e-4 (x10 sur la nouvelle
+              couche conv10), cosine, augmentation "base", lots de 64,
+              20 epochs. Code du commit 1ce430f.
+Durée       : 64.6 min (graine 2) et 58.8 min (graine 3) sur le CPU du
+              Mac, contre 66.5 min pour la graine 1.
+Résultats   : graine  train    validation  écart   F1 macro  frugalité
+                1     98.4 %    86.6 %      11.7    0.873     0.747
+                2     98.4 %    85.7 %      12.7    0.864     0.738
+                3     98.0 %    86.0 %      12.0    0.868     0.741
+              moyenne 98.2 %    86.1 %      12.1    0.868     0.742
+              Écart-type sur 3 graines : 0.005 pour l'exactitude de
+              validation, le F1 macro et la frugalité.
+Bilan des 3 réseaux (3 graines chacun, sur le Mac) :
+                                  CNN           SqueezeNet    ResNet-18
+              paramètres          191 787       728 139       11 186 955
+              pénalité            0.048         0.126         0.275
+              exactitude train    88.2 %        98.2 %        99.99 %
+              validation          73.6 %        86.1 %        91.5 %
+              écart               14.7 pts      12.1 pts      8.5 pts
+              F1 macro            0.731         0.868         0.921
+              frugalité           0.683         0.742         0.646
+              écart-type frug.    0.010         0.005         0.004
+F1 par classe (moyenne des 3 graines ; entre parenthèses : CNN) :
+              noodles-pasta 0.94 (0.80), vegetable-fruit 0.93 (0.88),
+              soup 0.93 (0.86), rice 0.92 (0.76), meat 0.88 (0.77),
+              seafood 0.87 (0.75), fried 0.85 (0.72), egg 0.84 (0.72),
+              dairy 0.83 (0.56), dessert 0.79 (0.65), bread 0.78 (0.57)
+Courbes     : graine  perte de validation   perte de     exactitude de
+                      la plus basse         validation   validation sur
+                                            finale       5 dernières ep.
+                1     0.53 (epoch 10)       0.62         0.863 à 0.867
+                2     0.54 (epoch 12)       0.64         0.856 à 0.859
+                3     0.55 (epoch 12)       0.63         0.859 à 0.862
+Lecture     : 1. Les 3 graines confirment la graine 1. Le SqueezeNet est
+                 aussi le plus stable des 3 réseaux avec le ResNet-18 :
+                 écart-type de 0.005, deux fois plus faible que celui du
+                 CNN (0.010).
+              2. Il bat le CNN en frugalité de 0.059 (0.742 contre
+                 0.683), près de 6 fois l'écart-type du CNN, et le
+                 ResNet-18 de 0.096. Avec 4 fois plus de paramètres que
+                 le CNN (0.078 de pénalité en plus), il gagne 0.137 de
+                 F1 macro. Le classement des 3 réseaux est net.
+              3. bread et dessert restent les classes les plus faibles à
+                 chaque graine (0.78 et 0.79). Les mêmes confusions
+                 reviennent : bread et egg (31, 36 et 37 images dans
+                 les deux sens selon la graine) et dessert prédit bread
+                 (24, 23 et 27 images). Le ResNet-18 fait beaucoup moins
+                 cette dernière erreur (8, 5 et 5 images). Les classes
+                 qui varient le plus d'une graine à l'autre sont
+                 seafood (0.85 à 0.89), rice (0.90 à 0.94, seulement 75
+                 images de validation) et fried (0.84 à 0.87).
+              4. Le début de surapprentissage se retrouve à chaque
+                 graine : la perte de validation est au plus bas à
+                 l'epoch 10 ou 12, puis remonte, alors que l'exactitude
+                 de validation reste stable sur les dernières epochs.
+                 Le ResNet-18, lui, ne montre pas ce comportement.
+                 Réduire le nombre d'epochs n'a pas été testé.
+Décision    : le SqueezeNet est retenu comme réseau à soumettre
+              (meilleure frugalité de validation sur 3 graines).
+              Moyenne retenue : F1 macro 0.868 +/- 0.005, frugalité
+              0.742 +/- 0.005. Prochaine étape, quand le groupe le
+              décidera : soumission d'essai sur le serveur (sans cocher
+              le classement) pour obtenir le score de test, à comparer
+              à la frugalité de test du CNN (0.665).
