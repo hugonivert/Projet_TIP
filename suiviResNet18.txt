@@ -1,0 +1,129 @@
+JOURNAL DE BORD DU RESNET-18 PRÉ-ENTRAÎNÉ (challenge Food-11)
+==============================================================
+
+Ce fichier garde la trace de chaque entraînement du ResNet-18 (réseau
+n°2, script resnet18_food11.m) : pourquoi on le lance, les réglages, les
+résultats, ce qu'on en conclut et la décision prise. Il sert, avec
+suiviCNN.txt, de base à la comparaison des réseaux dans le rapport.
+
+Les chiffres bruts sont dans built/essais_resnet18.csv (une ligne par
+entraînement), les courbes dans built/historique_<essai>_graine<n>.csv
+et les matrices de confusion dans built/confusion_<essai>_graine<n>.csv.
+Ces fichiers ne sont pas sur GitHub : les résultats importants sont
+recopiés ici.
+
+
+RÈGLES
+------
+
+- Mêmes règles que le CNN personnel (voir suiviCNN.txt) : on juge sur la
+  frugalité = F1 macro - 0.3 / (1 + 1/R), R en millions de paramètres,
+  calculée par evaluerReseau.m sur la même validation (graine de
+  découpage 42, 2 659 images).
+- Preuve que la validation est la même : built/validation_fichiers.txt
+  (liste triée des images de validation) est identique à la liste
+  enregistrée avec le réseau de l'essai 8 du CNN (vérifié le 2026-11-11).
+- Les durées ne se comparent qu'entre entraînements faits sur la même
+  machine (colonne "machine" du journal).
+
+
+CHOIX DE CONCEPTION (avec leur justification)
+---------------------------------------------
+
+[2026-11-11] ResNet-18 pré-entraîné plutôt que ResNet-34 de zéro
+  Le script de départ de Nathan entraînait par défaut un ResNet-34 de
+  zéro (environ 21 millions de paramètres, pénalité 0.287) : trop de
+  paramètres pour environ 10 600 images d'entraînement, et des heures de
+  calcul. MATLAB ne fournit pas de ResNet-34 pré-entraîné. Le ResNet-18
+  pré-entraîné sur ImageNet (11 186 955 paramètres avec 11 classes,
+  pénalité 0.275) profite de ce qu'il a appris sur 1.2 million d'images.
+  C'est aussi le réseau de la référence du tuteur (F1 0.819 et frugalité
+  0.543 sur le test), ce qui permet de situer notre entraînement.
+
+[2026-11-11] Transfer learning par fine-tuning complet
+  La dernière couche (1000 classes) est remplacée par une couche à 11
+  classes, puis tout le réseau est réentraîné avec un taux faible
+  (adam, 3e-4, celui de Nathan) : il s'adapte à Food-11 sans effacer ce
+  qu'il sait. Aucune couche n'est figée, pour rester simple.
+
+[2026-11-11] Images 224x224 et normalisation d'ImageNet
+  Taille d'entrée d'origine du réseau, celle pour laquelle ses poids ont
+  été appris (le script de Nathan redimensionnait en 128x128, ce qui
+  aurait fait échouer l'entraînement). ResetInputNormalization=false :
+  la couche d'entrée garde la moyenne et l'écart-type d'ImageNet au lieu
+  de les recalculer sur Food-11.
+
+[2026-11-11] Mêmes choix d'entraînement que le CNN personnel
+  Même augmentation "base", calendrier cosine, réseau de la dernière
+  epoch (OutputNetwork="last-iteration"), une validation par epoch,
+  graine d'entraînement fixée avant le chargement du réseau (poids de
+  départ de la nouvelle couche) et avant l'entraînement (ordre des
+  images, augmentation). 15 epochs : un réseau pré-entraîné converge
+  vite.
+
+
+----------------------------------------------------------------------
+ENTRAÎNEMENT 1 : resnet18_base_15ep, graine 1 (2026-11-11)
+----------------------------------------------------------------------
+Pourquoi    : obtenir le deuxième réseau demandé par le sujet, évalué
+              exactement comme le CNN personnel, pour les comparer.
+              Point de repère : pour égaler la frugalité du CNN (0.683),
+              le ResNet-18 doit atteindre un F1 macro de 0.958.
+Changement  : aucun, premier entraînement (valeurs par défaut du
+              script).
+Réglages    : 224x224, adam, taux de départ 3e-4, cosine, augmentation
+              "base", lots de 64, 15 epochs, graine 1. Code du commit
+              1b8752f.
+Durée       : 71.1 min sur le CPU du Mac (environ 4.7 min par epoch).
+Résultats   :                     CNN (essai 8,     ResNet-18
+                                  moy. 3 graines)   (graine 1)
+              paramètres          191 787           11 186 955
+              pénalité            0.048             0.275
+              exactitude train    88.2 %            99.98 %
+              validation          73.6 %            91.6 %
+              écart               14.7 pts          8.4 pts
+              F1 macro            0.731             0.922
+              frugalité           0.683             0.647
+F1 par classe (entre parenthèses : CNN, moyenne des 3 graines) :
+              rice 0.98 (0.76), noodles-pasta 0.98 (0.80),
+              vegetable-fruit 0.97 (0.88), soup 0.96 (0.86), meat 0.92
+              (0.77), seafood 0.92 (0.75), fried 0.90 (0.72), egg 0.89
+              (0.72), dessert 0.89 (0.65), dairy 0.89 (0.56), bread
+              0.85 (0.57)
+Courbes     : epoch  taux     perte train  exactitude   perte
+                              (lots)       validation   validation
+                1   3.0e-4      0.71          0.79         0.68
+                5   2.4e-4      0.14          0.87         0.45
+               10   8.5e-5      0.016         0.91         0.36
+               15   3e-9        0.005         0.92         0.34
+              Validation stable entre 0.912 et 0.918 sur les 5
+              dernières epochs.
+Lecture     : 1. Le ResNet-18 reconnaît bien mieux les plats : +0.19 de
+                 F1 macro, et les 11 classes dépassent 0.85. Les plus
+                 gros gains portent sur les classes les plus faibles du
+                 CNN : dairy (+0.33), bread (+0.28), dessert (+0.24).
+              2. Le CNN reste devant en frugalité, de 0.036, soit plus de
+                 3 fois son écart-type entre graines (0.010). Les 58 fois
+                 plus de paramètres du ResNet-18 coûtent 0.227 de
+                 pénalité en plus, que ses +0.19 de F1 ne compensent pas.
+              3. Le réseau apprend le train presque par coeur (99.98 %),
+                 mais l'écart avec la validation (8.4 points) est plus
+                 faible que celui du CNN (14.7). La perte de validation
+                 baisse jusqu'à la fin (0.68 à 0.34) : pas de
+                 dégradation, 15 epochs suffisent.
+              4. bread reste la classe la plus faible, toujours
+                 confondue surtout avec egg (20 + 11 = 31 images,
+                 contre 66 pour le CNN à l'essai 8).
+              5. Le F1 macro de validation (0.922) dépasse nettement le
+                 F1 de test de la référence du tuteur (0.819, même
+                 réseau), mais l'un est mesuré sur la validation et
+                 l'autre sur le test : la comparaison n'est pas encore
+                 faite à égalité. Une soumission d'essai sur le serveur
+                 (sans mise à jour du classement) donnerait le score de
+                 test.
+              Limite : une seule graine. Les graines 1, 2 et 3 sont
+              relancées sur GPU par Sam.
+Décision    : le CNN personnel reste le réseau à soumettre (meilleure
+              frugalité). Attendre les 3 graines de Sam pour la moyenne
+              et l'écart-type, et soumettre ces prédictions au serveur
+              sans cocher le classement pour obtenir le score de test.
