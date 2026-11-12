@@ -1,0 +1,2 @@
+date,essai,graineDecoupage,graineEntrainement,taille,optimiseur,tauxApprentissage,calendrierTaux,augmentation,tailleLot,epochs,parametres,exactitudeTrain,exactitudeVal,f1Val,frugalite,dureeMin,machine,versionMatlab
+2026-11-12 11:52,squeezenet_base_20ep,42,1,227x227,adam,0.0003,cosine,base,64,20,728139,0.976215098241985,0.864986837156826,0.872764915658115,0.74636206264687,18.839262705,gpu NVIDIA GeForce RTX 4050 Laptop GPU,2026a
