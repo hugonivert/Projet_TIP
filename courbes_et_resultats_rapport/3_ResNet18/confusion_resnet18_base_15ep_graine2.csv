@@ -1,0 +1,12 @@
+vraieClasse,bread,dairy,dessert,egg,fried,meat,noodles-pasta,rice,seafood,soup,vegetable-fruit
+bread,219,2,8,20,8,8,0,1,3,2,0
+dairy,2,103,6,0,2,2,0,0,0,0,0
+dessert,5,10,346,10,2,13,0,1,1,5,7
+egg,8,2,7,239,1,1,0,1,1,1,2
+fried,2,3,6,0,208,9,1,1,3,1,1
+meat,2,0,1,3,2,339,0,0,5,2,1
+noodles-pasta,0,0,0,1,0,0,115,0,0,1,0
+rice,0,0,0,1,0,0,0,74,0,0,0
+seafood,2,3,2,0,1,11,0,0,218,0,3
+soup,2,1,7,2,3,3,1,0,4,377,0
+vegetable-fruit,0,0,0,1,0,0,1,0,0,0,186

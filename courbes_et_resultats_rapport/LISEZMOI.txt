@@ -1,0 +1,118 @@
+RÉSULTATS POUR LE RAPPORT (challenge Food-11)
+=============================================
+
+Ce dossier rassemble les résultats importants pour rédiger le rapport :
+journaux des essais, courbes d'apprentissage (en CSV, epoch par epoch),
+matrices de confusion et journaux de bord. Ce sont des copies des
+fichiers de built/ et de la racine du projet, faites le 2026-11-12.
+
+Tous les calculs viennent du Mac de Victor (CPU, MATLAB R2026b). Les
+calculs de Sam sur GPU ne sont pas inclus pour l'instant.
+
+Les fichiers .mat des réseaux entraînés restent dans built/ (environ
+40 Mo chacun pour le ResNet-18).
+
+
+RÉSUMÉ DES RÉSULTATS (validation, 2 659 images, 3 graines par réseau)
+---------------------------------------------------------------------
+
+                    CNN           SqueezeNet    ResNet-18
+  paramètres        191 787       728 139       11 186 955
+  pénalité          0.048         0.126         0.275
+  exactitude train  88.2 %        98.2 %        99.99 %
+  validation        73.6 %        86.1 %        91.5 %
+  F1 macro          0.731         0.868         0.921
+  frugalité         0.683         0.742         0.646
+  écart-type frug.  0.010         0.005         0.004
+
+Réseau retenu pour la soumission : le SqueezeNet.
+
+
+CONTENU
+-------
+
+1_CNN/ (axe 1 du rapport)
+  essais.csv
+    Journal de tous les entraînements du CNN personnel, une ligne par
+    entraînement : réglages, exactitudes, F1 macro, frugalité, durée.
+    Sert au tableau des essais 1 à 10.
+  essai8_retenu/
+    Courbes de l'essai 8 (aug_5blocs_60ep), le CNN retenu, graines 1,
+    2 et 3, et ses matrices de confusion (recalculées le 2026-11-12 à
+    partir des réseaux sauvegardés dans built/ ; elles redonnent
+    exactement les F1 macro du journal : 0.7214, 0.7405, 0.7318).
+  autres_essais/
+    Courbes des autres essais :
+      base_4blocs          essai 1
+      cosine_20ep          essai 2 (graines 1, 2 et 3)
+      cosine_40ep          essai 3
+      cosine_40ep_aug      essai 4
+      aug_192, aug_5blocs  essai 5
+      aug_5blocs_160       essai 6
+      aug_5blocs_poids     essai 7
+      aug_5blocs_60ep_drop30  essai 9
+      aug_forte_60ep       essai 10
+
+2_SqueezeNet/ (axe 2)
+  essais_squeezenet.csv : journal des 3 graines.
+  historique_squeezenet_base_20ep_graine<n>.csv : courbes (20 epochs).
+  confusion_squeezenet_base_20ep_graine<n>.csv : matrices de confusion
+  (lignes : vraie classe, colonnes : classe prédite).
+
+3_ResNet18/ (axe 2)
+  Mêmes fichiers que le SqueezeNet, pour resnet18_base_15ep (15
+  epochs).
+
+4_communs/
+  validation_fichiers.txt : liste triée des 2 659 images de validation,
+  la même pour tous les réseaux (preuve de la comparaison à égalité).
+  predictions_squeezenet_base_20ep_graine1.json : prédictions du
+  SqueezeNet sur le test, prêtes pour la soumission d'essai au serveur.
+
+figures/ (images PNG à 300 dpi, fond blanc, couleurs de MATLAB : bleu
+pour l'entraînement, orange pour la validation)
+  1_CNN/
+    courbes_aug_5blocs_60ep_graine<n>.png : courbes d'apprentissage du
+      CNN retenu (exactitude et perte, entraînement et validation).
+    courbes_essai<numéro>_<nom>_graine<n>.png : courbes des autres
+      essais.
+    confusion_aug_5blocs_60ep_graine<n>.png et _3graines.png : matrices
+      de confusion par graine et somme des 3 graines.
+    tableau_essais_cnn.png : tableau de tous les entraînements.
+    tableau_graines_aug_5blocs_60ep.png : les 3 graines de l'essai 8.
+    evolution_essais_cnn.png : F1 macro et frugalité au fil des essais.
+  2_SqueezeNet/ et 3_ResNet18/
+    Courbes, matrices de confusion (par graine et somme des 3) et
+    tableau des 3 graines.
+  4_synthese/
+    f1_selon_parametres.png : F1 macro en fonction du nombre de
+      paramètres (échelle logarithmique), avec les courbes d'égale
+      frugalité. Figure clé de l'axe 3.
+    tableau_synthese.png : comparaison des 3 réseaux.
+    f1_par_classe.png : F1 par classe des 3 réseaux.
+    ecart_train_validation.png : exactitude train et validation.
+    validation_comparee.png : exactitude et perte de validation au fil
+      des epochs, pour les 3 réseaux.
+  Dans les figures de synthèse, le CNN est en bleu, le SqueezeNet en
+  orange et le ResNet-18 en jaune (troisième couleur de MATLAB).
+  L'exactitude d'entraînement des courbes est mesurée sur les lots
+  pendant l'entraînement, sur des images augmentées : elle est plus
+  basse que l'exactitude train des tableaux, mesurée à la fin sur les
+  images non augmentées.
+
+journaux_de_bord/
+  suiviCNN.txt, suiviSqueezeNet.txt, suiviResNet18.txt : pourquoi
+  chaque essai, résultats, lecture et décision. Copies au 2026-11-12 ;
+  les versions à jour sont à la racine du projet.
+
+
+COLONNES DES FICHIERS D'HISTORIQUE
+----------------------------------
+
+  epoch                 numéro de l'epoch
+  tauxEpoch             taux d'apprentissage au début de l'epoch
+  perteTrainLots        perte moyenne sur les lots d'entraînement
+  exactitudeTrainLots   exactitude moyenne sur les lots d'entraînement
+                        (images augmentées)
+  perteVal              perte sur la validation
+  exactitudeVal         exactitude sur la validation

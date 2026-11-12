@@ -1,0 +1,209 @@
+JOURNAL DE BORD DU SQUEEZENET PRÉ-ENTRAÎNÉ (challenge Food-11)
+===============================================================
+
+Ce fichier garde la trace de chaque entraînement du SqueezeNet (réseau
+n°3, script squeezenet_food11.m) : pourquoi on le lance, les réglages, les
+résultats, ce qu'on en conclut et la décision prise. Il sert, avec
+suiviCNN.txt et suiviResNet18.txt, de base à la comparaison des réseaux
+dans le rapport.
+
+Les chiffres bruts sont dans built/essais_squeezenet.csv (une ligne par
+entraînement), les courbes dans built/historique_<essai>_graine<n>.csv
+et les matrices de confusion dans built/confusion_<essai>_graine<n>.csv.
+Ces fichiers ne sont pas sur GitHub : les résultats importants sont
+recopiés ici.
+
+
+RÈGLES
+------
+
+- Mêmes règles que les autres réseaux (voir suiviCNN.txt) : on juge sur
+  la frugalité = F1 macro - 0.3 / (1 + 1/R), R en millions de
+  paramètres, calculée par evaluerReseau.m sur la même validation
+  (graine de découpage 42, 2 659 images).
+- Preuve que la validation est la même : built/validation_fichiers.txt
+  est identique à la liste enregistrée avec le réseau de l'essai 8 du
+  CNN (vérifié le 2026-11-11 avec le test rapide du script).
+- Les durées ne se comparent qu'entre entraînements faits sur la même
+  machine (colonne "machine" du journal).
+
+
+CHOIX DE CONCEPTION (avec leur justification)
+---------------------------------------------
+
+[2026-11-11] SqueezeNet pré-entraîné : le réseau pré-entraîné le plus
+frugal de MATLAB
+  SqueezeNet (Iandola et al., 2016) a été conçu pour atteindre la
+  précision d'AlexNet avec environ 50 fois moins de paramètres. Ses
+  "fire modules" réduisent d'abord le nombre de canaux avec des
+  convolutions 1x1 ("squeeze"), puis les élargissent avec un mélange de
+  convolutions 1x1 et 3x3 ("expand"). Il n'a pas de grande couche dense :
+  la dernière convolution 1x1 (conv10) est suivie d'un global average
+  pooling, comme notre CNN personnel. Avec 11 classes : 728 139
+  paramètres, pénalité 0.126. Pour égaler la frugalité du CNN (0.683), il
+  lui faut un F1 macro de 0.809. Fourni avec le Deep Learning Toolbox,
+  aucun module à installer.
+
+[2026-11-11] Script de Nathan complété plutôt que réécrit
+  Choix de Nathan conservés : images 227x227 (taille d'origine du
+  réseau), lots de 64, 20 epochs, adam avec un taux de 3e-4, et la
+  dernière couche conv10 remplacée par une couche à 11 classes, entraînée
+  avec un taux 10 fois plus fort que le reste du réseau (elle part de
+  poids tirés au hasard, alors que les autres couches sont déjà bonnes).
+  Ajouts pour comparer à égalité avec les autres réseaux (commit
+  1ce430f) : graine 42 avant le découpage, graine d'entraînement fixée
+  avant la construction du réseau et avant l'entraînement, même
+  augmentation "base", calendrier cosine, réseau de la dernière epoch,
+  normalisation d'ImageNet conservée (la couche d'entrée soustrait la
+  moyenne d'ImageNet), lecture des images sans ReadFcn, mêmes fichiers
+  de sortie. Mode "scratch" (SqueezeNet entraîné de zéro) retiré, comme
+  le ResNet-34 de zéro : non utilisé.
+
+
+----------------------------------------------------------------------
+ENTRAÎNEMENT 1 : squeezenet_base_20ep, graine 1 (2026-11-11)
+----------------------------------------------------------------------
+Pourquoi    : troisième réseau, pré-entraîné et léger. Le seul réseau
+              pré-entraîné de MATLAB qui pouvait battre le CNN en
+              frugalité (F1 macro nécessaire : 0.809, contre 0.958 pour
+              le ResNet-18).
+Changement  : aucun, premier entraînement (valeurs par défaut du
+              script).
+Réglages    : 227x227, adam, taux de départ 3e-4 (x10 sur la nouvelle
+              couche conv10), cosine, augmentation "base", lots de 64,
+              20 epochs, graine 1. Code du commit 1ce430f.
+Durée       : 66.5 min sur le CPU du Mac (environ 3.3 min par epoch).
+              Plus long que prévu d'après le nombre d'opérations
+              (environ 5 fois moins que le ResNet-18, qui prenait 4.7
+              min par epoch) : le processeur traite moins efficacement
+              ce réseau fait de nombreuses petites couches.
+Résultats   :                     CNN           SqueezeNet    ResNet-18
+                                  (3 graines)   (graine 1)    (2 graines)
+              paramètres          191 787       728 139       11 186 955
+              pénalité            0.048         0.126         0.275
+              exactitude train    88.2 %        98.4 %        99.99 %
+              validation          73.6 %        86.6 %        91.4 %
+              écart               14.7 pts      11.7 pts      8.6 pts
+              F1 macro            0.731         0.873         0.919
+              frugalité           0.683         0.747         0.644
+F1 par classe (entre parenthèses : CNN, moyenne des 3 graines) :
+              vegetable-fruit 0.94 (0.88), noodles-pasta 0.94 (0.80),
+              soup 0.93 (0.86), rice 0.92 (0.76), seafood 0.89 (0.75),
+              meat 0.88 (0.77), fried 0.87 (0.72), egg 0.86 (0.72),
+              dairy 0.83 (0.56), dessert 0.78 (0.65), bread 0.78 (0.57)
+Courbes     : epoch  taux     perte train  exactitude   perte
+                              (lots)       validation   validation
+                1   3.0e-4      1.35          0.70         0.90
+                5   2.7e-4      0.51          0.81         0.60
+               10   1.6e-4      0.27          0.85         0.53
+               15   4.8e-5      0.11          0.86         0.60
+               20   3e-9        0.063         0.87         0.62
+              Validation entre 0.863 et 0.867 sur les 5 dernières
+              epochs.
+Lecture     : 1. Le SqueezeNet bat le CNN en frugalité de 0.064 (0.747
+                 contre 0.683), soit plus de 6 fois l'écart-type du CNN
+                 entre graines (0.010). Avec 4 fois plus de paramètres
+                 (0.078 de pénalité en plus), il gagne 0.142 de F1
+                 macro.
+              2. Il se place entre les deux autres réseaux : moins bon
+                 que le ResNet-18 en F1 (0.873 contre 0.919), mais 15
+                 fois plus petit. Le pré-entraînement l'emporte quand le
+                 réseau reste petit ; le ResNet-18, lui, perd tout son
+                 avantage dans la pénalité.
+              3. Les 11 classes progressent par rapport au CNN, surtout
+                 les plus faibles : dairy (+0.27), bread (+0.21), rice
+                 (+0.16). bread et dessert restent les plus faibles
+                 (0.78). bread est toujours confondue avec egg (17 + 14
+                 = 31 images) et aussi avec dessert (18 images de bread
+                 prédites dessert).
+              4. Début de surapprentissage : la perte de validation est
+                 au plus bas à l'epoch 10 (0.53), puis remonte (0.62 à la
+                 fin), alors que l'exactitude de validation continue de
+                 monter (0.85 à 0.87). Le réseau devient trop sûr de lui
+                 sur les images qu'il rate, sans que le score baisse.
+                 Moins d'epochs suffiraient peut-être, mais avec le
+                 calendrier cosine il faudrait un essai complet pour le
+                 vérifier.
+              Limite : une seule graine, et pas encore de score sur le
+              test.
+Décision    : le SqueezeNet devient le candidat pour la soumission
+              finale (meilleure frugalité de validation), à confirmer
+              avec les graines 2 et 3 (lancées à la suite sur le Mac).
+              Le choix définitif se fera après une soumission d'essai
+              sur le serveur (sans cocher le classement), à comparer à
+              la frugalité de test du CNN (0.665).
+
+
+----------------------------------------------------------------------
+ENTRAÎNEMENTS 2 ET 3 : squeezenet_base_20ep, graines 2 et 3 (2026-11-11)
+----------------------------------------------------------------------
+Pourquoi    : vérifier sur 3 graines que l'avance du SqueezeNet sur le
+              CNN (0.064 avec la graine 1) n'est pas due au hasard, avant
+              d'en faire le réseau à soumettre.
+Changement  : aucun. Même réglage que l'entraînement 1, graines
+              d'entraînement 2 et 3 (même validation, graine de
+              découpage 42). Lancées à la suite sur le Mac.
+Réglages    : 227x227, adam, taux de départ 3e-4 (x10 sur la nouvelle
+              couche conv10), cosine, augmentation "base", lots de 64,
+              20 epochs. Code du commit 1ce430f.
+Durée       : 64.6 min (graine 2) et 58.8 min (graine 3) sur le CPU du
+              Mac, contre 66.5 min pour la graine 1.
+Résultats   : graine  train    validation  écart   F1 macro  frugalité
+                1     98.4 %    86.6 %      11.7    0.873     0.747
+                2     98.4 %    85.7 %      12.7    0.864     0.738
+                3     98.0 %    86.0 %      12.0    0.868     0.741
+              moyenne 98.2 %    86.1 %      12.1    0.868     0.742
+              Écart-type sur 3 graines : 0.005 pour l'exactitude de
+              validation, le F1 macro et la frugalité.
+Bilan des 3 réseaux (3 graines chacun, sur le Mac) :
+                                  CNN           SqueezeNet    ResNet-18
+              paramètres          191 787       728 139       11 186 955
+              pénalité            0.048         0.126         0.275
+              exactitude train    88.2 %        98.2 %        99.99 %
+              validation          73.6 %        86.1 %        91.5 %
+              écart               14.7 pts      12.1 pts      8.5 pts
+              F1 macro            0.731         0.868         0.921
+              frugalité           0.683         0.742         0.646
+              écart-type frug.    0.010         0.005         0.004
+F1 par classe (moyenne des 3 graines ; entre parenthèses : CNN) :
+              noodles-pasta 0.94 (0.80), vegetable-fruit 0.93 (0.88),
+              soup 0.93 (0.86), rice 0.92 (0.76), meat 0.88 (0.77),
+              seafood 0.87 (0.75), fried 0.85 (0.72), egg 0.84 (0.72),
+              dairy 0.83 (0.56), dessert 0.79 (0.65), bread 0.78 (0.57)
+Courbes     : graine  perte de validation   perte de     exactitude de
+                      la plus basse         validation   validation sur
+                                            finale       5 dernières ep.
+                1     0.53 (epoch 10)       0.62         0.863 à 0.867
+                2     0.54 (epoch 12)       0.64         0.856 à 0.859
+                3     0.55 (epoch 12)       0.63         0.859 à 0.862
+Lecture     : 1. Les 3 graines confirment la graine 1. Le SqueezeNet est
+                 aussi le plus stable des 3 réseaux avec le ResNet-18 :
+                 écart-type de 0.005, deux fois plus faible que celui du
+                 CNN (0.010).
+              2. Il bat le CNN en frugalité de 0.059 (0.742 contre
+                 0.683), près de 6 fois l'écart-type du CNN, et le
+                 ResNet-18 de 0.096. Avec 4 fois plus de paramètres que
+                 le CNN (0.078 de pénalité en plus), il gagne 0.137 de
+                 F1 macro. Le classement des 3 réseaux est net.
+              3. bread et dessert restent les classes les plus faibles à
+                 chaque graine (0.78 et 0.79). Les mêmes confusions
+                 reviennent : bread et egg (31, 36 et 37 images dans
+                 les deux sens selon la graine) et dessert prédit bread
+                 (24, 23 et 27 images). Le ResNet-18 fait beaucoup moins
+                 cette dernière erreur (8, 5 et 5 images). Les classes
+                 qui varient le plus d'une graine à l'autre sont
+                 seafood (0.85 à 0.89), rice (0.90 à 0.94, seulement 75
+                 images de validation) et fried (0.84 à 0.87).
+              4. Le début de surapprentissage se retrouve à chaque
+                 graine : la perte de validation est au plus bas à
+                 l'epoch 10 ou 12, puis remonte, alors que l'exactitude
+                 de validation reste stable sur les dernières epochs.
+                 Le ResNet-18, lui, ne montre pas ce comportement.
+                 Réduire le nombre d'epochs n'a pas été testé.
+Décision    : le SqueezeNet est retenu comme réseau à soumettre
+              (meilleure frugalité de validation sur 3 graines).
+              Moyenne retenue : F1 macro 0.868 +/- 0.005, frugalité
+              0.742 +/- 0.005. Prochaine étape, quand le groupe le
+              décidera : soumission d'essai sur le serveur (sans cocher
+              le classement) pour obtenir le score de test, à comparer
+              à la frugalité de test du CNN (0.665).
